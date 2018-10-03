@@ -8,8 +8,12 @@ extern crate pairing;
 extern crate rand;
 extern crate sapling_crypto;
 
+#[cfg(test)]
+extern crate hex;
+
 use sapling_crypto::jubjub::JubjubBls12;
 
+pub mod merkle_tree;
 pub mod sapling;
 mod serialize;
 pub mod transaction;
