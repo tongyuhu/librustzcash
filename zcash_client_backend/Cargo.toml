@@ -7,3 +7,7 @@ authors = [
 edition = "2018"
 
 [dependencies]
+protobuf = "2"
+
+[build-dependencies]
+protobuf-codegen-pure = "2"
