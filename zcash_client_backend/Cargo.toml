@@ -10,6 +10,7 @@ edition = "2018"
 byteorder = "1"
 failure = "0.1"
 ff = { path = "../ff" }
+hex = "0.3"
 pairing = { path = "../pairing" }
 protobuf = "2"
 rand = "0.4"
