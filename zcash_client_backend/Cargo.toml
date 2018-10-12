@@ -8,6 +8,7 @@ authors = [
 [dependencies]
 byteorder = "1"
 ff = { path = "../ff" }
+hex = "0.3"
 pairing = { path = "../pairing" }
 protobuf = "2"
 rand = "0.4"
