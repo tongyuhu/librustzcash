@@ -4,3 +4,5 @@
 //! light clients.
 
 pub mod proto;
+pub mod wallet;
+pub mod welding_rig;

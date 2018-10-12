@@ -7,7 +7,12 @@ authors = [
 edition = "2018"
 
 [dependencies]
+ff = { path = "../ff" }
+hex = "0.3"
+pairing = { path = "../pairing" }
 protobuf = "2"
+sapling-crypto = { path = "../sapling-crypto" }
+zcash_primitives = { path = "../zcash_primitives" }
 
 [build-dependencies]
 protobuf-codegen-pure = "2"
