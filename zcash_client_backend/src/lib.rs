@@ -1,4 +1,5 @@
 pub mod data;
+pub mod keystore;
 mod note_encryption;
 pub mod proto;
 pub mod wallet;
