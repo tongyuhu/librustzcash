@@ -6,6 +6,7 @@ authors = [
 ]
 
 [dependencies]
+bech32 = "0.5"
 byteorder = "1"
 ff = { path = "../ff" }
 hex = "0.3"
