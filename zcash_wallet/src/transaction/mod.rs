@@ -9,6 +9,7 @@ use zcash_primitives::{
 };
 
 mod builder;
+mod note;
 
 pub use self::builder::Builder;
 
