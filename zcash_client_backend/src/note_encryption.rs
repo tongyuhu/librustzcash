@@ -222,6 +222,89 @@ pub fn try_sapling_note_decryption(
     Ok((note, to, Memo(memo)))
 }
 
+/// Attempts to decrypt and validate the given `enc_ciphertext` using the given `ovk`.
+/// If successful, the corresponding Sapling note and memo are returned, along with the
+/// `PaymentAddress` to which the note was sent.
+///
+/// Implements section 4.17.3 of the Zcash Protocol Specification.
+pub fn try_sapling_output_recovery(
+    ovk: &OutgoingViewingKey,
+    cv: &edwards::Point<Bls12, Unknown>,
+    cmu: &Fr,
+    epk: &edwards::Point<Bls12, PrimeOrder>,
+    enc_ciphertext: &[u8],
+    out_ciphertext: &[u8],
+) -> Result<(Note<Bls12>, PaymentAddress<Bls12>, Memo), Error> {
+    let nonce = [0u8; 12];
+    let ock = prf_ock(&ovk, &cv, &cmu, &epk);
+
+    let mut op = Vec::with_capacity(64);
+    chacha20_poly1305_aead::decrypt(
+        ock.as_bytes(),
+        &nonce,
+        &[],
+        &out_ciphertext[..64],
+        &out_ciphertext[64..],
+        &mut op,
+    )?;
+
+    let pk_d = match edwards::Point::<Bls12, _>::read(&op[0..32], &JUBJUB)?.as_prime_order(&JUBJUB)
+    {
+        Some(pk_d) => pk_d,
+        None => return Err(format_err!("pk_d in output plaintext is not prime order")),
+    };
+
+    let mut esk = FsRepr::default();
+    esk.read_le(&op[32..64])?;
+    let esk = Fs::from_repr(esk)?;
+
+    let shared_secret = sapling_ka_agree(&esk, &pk_d);
+    let key = kdf_sapling(&shared_secret, &epk);
+
+    let mut plaintext = Vec::with_capacity(564);
+    chacha20_poly1305_aead::decrypt(
+        key.as_bytes(),
+        &nonce,
+        &[],
+        &enc_ciphertext[..564],
+        &enc_ciphertext[564..],
+        &mut plaintext,
+    )?;
+
+    let mut d = [0u8; 11];
+    d.copy_from_slice(&plaintext[1..12]);
+
+    let v = (&plaintext[12..20]).read_u64::<LittleEndian>()?;
+
+    let mut rcm = FsRepr::default();
+    rcm.read_le(&plaintext[20..52])?;
+    let rcm = Fs::from_repr(rcm)?;
+
+    let mut memo = [0u8; 512];
+    memo.copy_from_slice(&plaintext[52..564]);
+
+    let diversifier = Diversifier(d);
+    match diversifier.g_d::<Bls12>(&JUBJUB) {
+        Some(g_d) => {
+            if g_d.mul(esk.into_repr(), &JUBJUB) != *epk {
+                return Err(format_err!("Published epk doesn't match calculated epk"));
+            }
+        }
+        None => return Err(format_err!("Invalid diversifier in note plaintext")),
+    };
+
+    let to = PaymentAddress { pk_d, diversifier };
+    let note = to.create_note(v, rcm, &JUBJUB).unwrap();
+
+    if note.cm(&JUBJUB) != *cmu {
+        return Err(format_err!(
+            "Published commitment doesn't match calculated commitment"
+        ));
+    }
+
+    Ok((note, to, Memo(memo)))
+}
+
 #[cfg(test)]
 mod tests {
     use ff::{PrimeField, PrimeFieldRepr};
@@ -237,8 +320,8 @@ mod tests {
     use zip32::OutgoingViewingKey;
 
     use super::{
-        kdf_sapling, prf_ock, sapling_ka_agree, try_sapling_note_decryption, Memo,
-        SaplingNoteEncryption,
+        kdf_sapling, prf_ock, sapling_ka_agree, try_sapling_note_decryption,
+        try_sapling_output_recovery, Memo, SaplingNoteEncryption,
     };
 
     #[test]
@@ -315,6 +398,15 @@ mod tests {
                     assert_eq!(&decrypted_memo.0[..], &tv.memo[..]);
                 }
                 Err(e) => panic!("Note decryption failed: {}", e),
+            }
+
+            match try_sapling_output_recovery(&ovk, &cv, &cmu, &epk, &tv.c_enc, &tv.c_out) {
+                Ok((decrypted_note, decrypted_to, decrypted_memo)) => {
+                    assert_eq!(decrypted_note, note);
+                    assert_eq!(decrypted_to, to);
+                    assert_eq!(&decrypted_memo.0[..], &tv.memo[..]);
+                }
+                Err(e) => panic!("Output recovery failed: {}", e),
             }
 
             //
