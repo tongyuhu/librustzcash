@@ -10,3 +10,9 @@ pub mod welding_rig;
 
 #[cfg(feature = "sqlite")]
 pub mod sqlite;
+
+#[cfg(feature = "jsonrpc")]
+mod jsonrpc;
+
+#[cfg(feature = "jsonrpc")]
+pub use jsonrpc::RpcChainSync;

@@ -9,13 +9,19 @@ edition = "2018"
 [dependencies]
 bech32 = "0.6"
 bellman = { path = "../bellman" }
+exonum_jsonrpc = { version = "0.5", optional = true }
 ff = { path = "../ff" }
 hex = "0.3"
+hex-serde = { version = "0.1", optional = true }
 pairing = { path = "../pairing" }
+pirate = { version = "1.0", optional = true }
 protobuf = "2"
 rand = "0.4"
 rusqlite = { version = "0.15", features = ["bundled"], optional = true }
 sapling-crypto = { path = "../sapling-crypto" }
+serde = { version = "1.0", optional = true }
+serde_derive = { version = "1.0", optional = true }
+serde_json = { version = "1.0", optional = true }
 time = { version = "0.1", optional = true }
 zcash_primitives = { path = "../zcash_primitives" }
 zcash_proofs = { path = "../zcash_proofs" }
@@ -29,4 +35,10 @@ dirs = "1"
 tempfile = "3"
 
 [features]
+jsonrpc = ["exonum_jsonrpc", "hex-serde", "serde", "serde_derive", "serde_json"]
+rpcsync = ["jsonrpc", "pirate"]
 sqlite = ["rusqlite", "time"]
+
+[[example]]
+name = "rpcsync"
+required-features = ["rpcsync"]
