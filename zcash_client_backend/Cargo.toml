@@ -10,13 +10,19 @@ edition = "2018"
 bech32 = "0.5"
 bellman = { path = "../bellman" }
 byteorder = "1"
+exonum_jsonrpc = { version = "0.5", optional = true }
 failure = "0.1"
 ff = { path = "../ff" }
 hex = "0.3"
+hex-serde = { version = "0.1", optional = true }
 pairing = { path = "../pairing" }
+pirate = { version = "1.0", optional = true }
 protobuf = "2"
 rand = "0.4"
 sapling-crypto = { path = "../sapling-crypto" }
+serde = { version = "1.0", optional = true }
+serde_derive = { version = "1.0", optional = true }
+serde_json = { version = "1.0", optional = true }
 zcash_primitives = { path = "../zcash_primitives" }
 zcash_proofs = { path = "../zcash_proofs" }
 zip32 = { path = "../zip32" }
@@ -31,3 +37,11 @@ rev = "aefc71f95e8bc43f2070e3c5b08130d9c86bbf4f"
 
 [build-dependencies]
 protobuf-codegen-pure = "2"
+
+[features]
+jsonrpc = ["exonum_jsonrpc", "hex-serde", "serde", "serde_derive", "serde_json"]
+rpcsync = ["jsonrpc", "pirate"]
+
+[[example]]
+name = "rpcsync"
+required-features = ["rpcsync"]

@@ -11,3 +11,9 @@ pub mod welding_rig;
 
 #[cfg(test)]
 mod test_vectors;
+
+#[cfg(feature = "jsonrpc")]
+mod jsonrpc;
+
+#[cfg(feature = "jsonrpc")]
+pub use jsonrpc::RpcChainSync;
