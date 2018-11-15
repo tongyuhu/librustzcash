@@ -40,5 +40,9 @@ rpcsync = ["jsonrpc", "pirate"]
 sqlite = ["rusqlite", "time"]
 
 [[example]]
+name = "balancer"
+required-features = ["rpcsync"]
+
+[[example]]
 name = "rpcsync"
 required-features = ["rpcsync"]
