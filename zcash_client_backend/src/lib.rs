@@ -2,6 +2,7 @@
 extern crate failure;
 
 extern crate bech32;
+extern crate bellman;
 extern crate blake2_rfc;
 extern crate byteorder;
 extern crate chacha20_poly1305_aead;
@@ -12,6 +13,7 @@ extern crate protobuf;
 extern crate rand;
 extern crate sapling_crypto;
 extern crate zcash_primitives;
+extern crate zcash_proofs;
 extern crate zip32;
 
 #[cfg(feature = "jsonrpc")]
@@ -37,6 +39,7 @@ pub mod data;
 pub mod keystore;
 mod note_encryption;
 pub mod proto;
+pub mod prover;
 pub mod wallet;
 pub mod welding_rig;
 
