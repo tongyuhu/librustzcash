@@ -534,6 +534,7 @@ name = "zcash_client_backend"
 version = "0.0.0"
 dependencies = [
  "bech32 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bellman 0.1.0",
  "ff 0.4.0",
  "hex 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "pairing 0.14.2",
@@ -542,6 +543,7 @@ dependencies = [
  "rand 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "sapling-crypto 0.0.1",
  "zcash_primitives 0.0.0",
+ "zcash_proofs 0.0.0",
  "zip32 0.0.0",
 ]
 

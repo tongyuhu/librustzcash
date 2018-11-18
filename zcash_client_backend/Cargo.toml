@@ -8,12 +8,14 @@ edition = "2018"
 
 [dependencies]
 bech32 = "0.6"
+bellman = { path = "../bellman" }
 ff = { path = "../ff" }
 hex = "0.3"
 pairing = { path = "../pairing" }
 protobuf = "2"
 sapling-crypto = { path = "../sapling-crypto" }
 zcash_primitives = { path = "../zcash_primitives" }
+zcash_proofs = { path = "../zcash_proofs" }
 zip32 = { path = "../zip32" }
 
 [build-dependencies]
