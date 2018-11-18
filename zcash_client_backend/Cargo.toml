@@ -8,6 +8,7 @@ edition = "2018"
 
 [dependencies]
 bech32 = "0.5"
+bellman = { path = "../bellman" }
 byteorder = "1"
 failure = "0.1"
 ff = { path = "../ff" }
@@ -17,6 +18,7 @@ protobuf = "2"
 rand = "0.4"
 sapling-crypto = { path = "../sapling-crypto" }
 zcash_primitives = { path = "../zcash_primitives" }
+zcash_proofs = { path = "../zcash_proofs" }
 zip32 = { path = "../zip32" }
 
 [dependencies.blake2-rfc]
