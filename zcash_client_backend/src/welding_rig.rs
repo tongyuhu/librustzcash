@@ -1,7 +1,10 @@
 use ff::{PrimeField, PrimeFieldRepr};
 use pairing::bls12_381::{Bls12, Fr, FrRepr};
 use protobuf::parse_from_bytes;
-use sapling_crypto::jubjub::{edwards, fs::Fs, PrimeOrder};
+use sapling_crypto::{
+    jubjub::{edwards, fs::Fs, PrimeOrder},
+    primitives::{Note, PaymentAddress},
+};
 use zcash_primitives::{
     merkle_tree::{CommitmentTree, IncrementalWitness, Node},
     transaction::TxId,
@@ -9,7 +12,6 @@ use zcash_primitives::{
 };
 use zip32::ExtendedFullViewingKey;
 
-use crate::data::EncCiphertextFrag;
 use crate::note_encryption::try_sapling_compact_note_decryption;
 use crate::proto::compact_formats::{CompactBlock, CompactOutput};
 use crate::wallet::{WalletShieldedOutput, WalletTx};
@@ -19,9 +21,9 @@ fn trial_decrypt(
     epk: &edwards::Point<Bls12, PrimeOrder>,
     enc_ct: &[u8],
     ivk: &Fs,
-) -> Option<u64> {
+) -> Option<(Note<Bls12>, PaymentAddress<Bls12>)> {
     match try_sapling_compact_note_decryption(ivk, epk, cmu, enc_ct) {
-        Ok((note, _)) => Some(note.value),
+        Ok((note, to)) => Some((note, to)),
         Err(_) => None,
     }
 }
@@ -67,23 +69,19 @@ fn scan_output(
     tree.append(node).unwrap();
 
     for (account, ivk) in ivks.iter().enumerate() {
-        let value = match trial_decrypt(&cmu, &epk, &ct, ivk) {
-            Some(value) => value,
+        let (note, to) = match trial_decrypt(&cmu, &epk, &ct, ivk) {
+            Some(ret) => ret,
             None => continue,
         };
-
-        // It's ours, so let's copy the ciphertext fragment and return
-        let mut enc_ct = EncCiphertextFrag([0u8; 52]);
-        enc_ct.0.copy_from_slice(&ct);
 
         return Some((
             WalletShieldedOutput {
                 index,
                 cmu,
                 epk,
-                enc_ct,
                 account,
-                value,
+                note,
+                to,
             },
             IncrementalWitness::from_tree(tree),
         ));
