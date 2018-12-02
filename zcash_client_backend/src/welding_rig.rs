@@ -14,7 +14,7 @@ use zcash_primitives::{
 };
 
 use crate::proto::compact_formats::{CompactBlock, CompactOutput};
-use crate::wallet::{EncCiphertextFrag, WalletShieldedOutput, WalletTx};
+use crate::wallet::{WalletShieldedOutput, WalletTx};
 
 /// Scans a [`CompactOutput`] with a set of [`ExtendedFullViewingKey`]s.
 ///
@@ -60,23 +60,19 @@ fn scan_output(
     tree.append(node).unwrap();
 
     for (account, ivk) in ivks.iter().enumerate() {
-        let value = match try_sapling_compact_note_decryption(ivk, &epk, &cmu, &ct) {
-            Some((note, _)) => note.value,
+        let (note, to) = match try_sapling_compact_note_decryption(ivk, &epk, &cmu, &ct) {
+            Some(ret) => ret,
             None => continue,
         };
-
-        // It's ours, so let's copy the ciphertext fragment and return
-        let mut enc_ct = EncCiphertextFrag([0u8; 52]);
-        enc_ct.0.copy_from_slice(&ct);
 
         return Some((
             WalletShieldedOutput {
                 index,
                 cmu,
                 epk,
-                enc_ct,
                 account,
-                value,
+                note,
+                to,
             },
             IncrementalWitness::from_tree(tree),
         ));
