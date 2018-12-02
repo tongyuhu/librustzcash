@@ -1,8 +1,9 @@
 use pairing::bls12_381::{Bls12, Fr};
-use sapling_crypto::jubjub::{edwards, PrimeOrder};
+use sapling_crypto::{
+    jubjub::{edwards, PrimeOrder},
+    primitives::{Note, PaymentAddress},
+};
 use zcash_primitives::transaction::TxId;
-
-use data::EncCiphertextFrag;
 
 pub struct WalletTx {
     pub txid: TxId,
@@ -15,7 +16,7 @@ pub struct WalletShieldedOutput {
     pub index: usize,
     pub cmu: Fr,
     pub epk: edwards::Point<Bls12, PrimeOrder>,
-    pub enc_ct: EncCiphertextFrag,
     pub account: usize,
-    pub value: u64,
+    pub note: Note<Bls12>,
+    pub to: PaymentAddress<Bls12>,
 }
