@@ -14,7 +14,7 @@ const SAPLING_COMMITMENT_TREE_DEPTH: usize = 32;
 
 trait Hashable: Clone + Copy {
     /// Returns the parent node within the tree of the two given nodes.
-    fn combine(&Self, &Self) -> Self;
+    fn combine(usize, &Self, &Self) -> Self;
 
     /// Returns a blank leaf node.
     fn blank() -> Self;
@@ -23,12 +23,11 @@ trait Hashable: Clone + Copy {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Node {
     repr: FrRepr,
-    depth: usize,
 }
 
 impl Node {
     pub fn new(repr: FrRepr) -> Self {
-        Node { repr, depth: 0 }
+        Node { repr }
     }
 
     pub fn read<R: Read>(mut reader: R) -> io::Result<Self> {
@@ -43,18 +42,15 @@ impl Node {
 }
 
 impl Hashable for Node {
-    fn combine(lhs: &Self, rhs: &Self) -> Self {
-        assert_eq!(lhs.depth, rhs.depth);
+    fn combine(depth: usize, lhs: &Self, rhs: &Self) -> Self {
         Node {
-            repr: merkle_hash(lhs.depth, &lhs.repr, &rhs.repr),
-            depth: lhs.depth + 1,
+            repr: merkle_hash(depth, &lhs.repr, &rhs.repr),
         }
     }
 
     fn blank() -> Self {
         Node {
             repr: Note::<Bls12>::uncommitted().into_repr(),
-            depth: 0,
         }
     }
 }
@@ -69,7 +65,7 @@ lazy_static! {
     static ref EMPTY_ROOTS: Vec<Node> = {
         let mut v = vec![Node::blank()];
         for d in 0..SAPLING_COMMITMENT_TREE_DEPTH {
-            let next = Node::combine(&v[d], &v[d]);
+            let next = Node::combine(d, &v[d], &v[d]);
             v.push(next);
         }
         v
@@ -113,14 +109,7 @@ impl CommitmentTree {
     pub fn read<R: Read>(mut reader: R) -> io::Result<Self> {
         let left = Optional::read(&mut reader, |r| Node::read(r))?;
         let right = Optional::read(&mut reader, |r| Node::read(r))?;
-        let mut parents = Vector::read(&mut reader, |r| Optional::read(r, |r| Node::read(r)))?;
-
-        // Set the parent depths
-        for (i, parent) in parents.iter_mut().enumerate() {
-            if let Some(node) = parent {
-                node.depth = i + 1;
-            }
-        }
+        let parents = Vector::read(&mut reader, |r| Optional::read(r, |r| Node::read(r)))?;
 
         Ok(CommitmentTree {
             left,
@@ -174,14 +163,14 @@ impl CommitmentTree {
             (None, _) => self.left = Some(node),
             (_, None) => self.right = Some(node),
             (Some(l), Some(r)) => {
-                let mut combined = Node::combine(&l, &r);
+                let mut combined = Node::combine(0, &l, &r);
                 self.left = Some(node);
                 self.right = None;
 
                 for i in 0..depth {
                     if i < self.parents.len() {
                         if let Some(p) = self.parents[i] {
-                            combined = Node::combine(&p, &combined);
+                            combined = Node::combine(i + 1, &p, &combined);
                             self.parents[i] = None;
                         } else {
                             self.parents[i] = Some(combined);
@@ -209,6 +198,7 @@ impl CommitmentTree {
         // 1) Hash left and right leaves together.
         //    - Empty leaves are used as needed.
         let leaf_root = Node::combine(
+            0,
             &match self.left {
                 Some(node) => node,
                 None => filler.next(0),
@@ -226,13 +216,13 @@ impl CommitmentTree {
             .iter()
             .enumerate()
             .fold(leaf_root, |root, (i, p)| match p {
-                Some(node) => Node::combine(node, &root),
-                None => Node::combine(&root, &filler.next(i + 1)),
+                Some(node) => Node::combine(i + 1, node, &root),
+                None => Node::combine(i + 1, &root, &filler.next(i + 1)),
             });
 
         // 3) Hash in roots of the empty subtrees up to the final depth.
         ((self.parents.len() + 1)..depth)
-            .fold(mid_root, |root, d| Node::combine(&root, &filler.next(d)))
+            .fold(mid_root, |root, d| Node::combine(d, &root, &filler.next(d)))
     }
 }
 
@@ -996,17 +986,8 @@ mod tests {
             tree.write(&mut tmp).unwrap();
             assert_eq!(hex::encode(&tmp[..]), expected);
 
-            // Check that parent depths are preserved on read
-            let decoded = TestCommitmentTree::read(&hex::decode(expected).unwrap()[..]).unwrap();
-            for (i, parent) in tree.0.parents.iter().enumerate() {
-                match (parent, decoded.0.parents[i]) {
-                    (Some(a), Some(b)) => assert_eq!(a.depth, b.depth),
-                    (None, None) => (),
-                    _ => panic!("Parents don't match"),
-                }
-            }
-
             // Check round-trip encoding
+            let decoded = TestCommitmentTree::read(&hex::decode(expected).unwrap()[..]).unwrap();
             tmp.clear();
             decoded.write(&mut tmp).unwrap();
             assert_eq!(hex::encode(tmp), expected);
