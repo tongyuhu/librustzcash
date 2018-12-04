@@ -11,7 +11,13 @@ pub struct WalletTx {
     pub txid: TxId,
     pub num_spends: usize,
     pub num_outputs: usize,
+    pub shielded_spends: Vec<WalletShieldedSpend>,
     pub shielded_outputs: Vec<WalletShieldedOutput>,
+}
+
+pub struct WalletShieldedSpend {
+    pub index: usize,
+    pub nf: Vec<u8>,
 }
 
 pub struct WalletShieldedOutput {
