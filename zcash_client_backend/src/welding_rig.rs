@@ -11,7 +11,7 @@ use zcash_primitives::{
 use zip32::ExtendedFullViewingKey;
 
 use crate::proto::compact_formats::{CompactBlock, CompactOutput};
-use crate::wallet::{WalletShieldedOutput, WalletTx};
+use crate::wallet::{WalletShieldedOutput, WalletShieldedSpend, WalletTx};
 
 /// Returns a WalletShieldedOutput and corresponding IncrementalWitness if this
 /// output belongs to any of the given ExtendedFullViewingKeys. The given
@@ -81,6 +81,7 @@ fn scan_output(
 pub fn scan_block(
     block: CompactBlock,
     extfvks: &[ExtendedFullViewingKey],
+    nullifiers: &[&[u8]],
     tree: &mut CommitmentTree,
     existing_witnesses: &mut [&mut IncrementalWitness],
 ) -> Vec<(WalletTx, Vec<IncrementalWitness>)> {
@@ -90,6 +91,23 @@ pub fn scan_block(
     for tx in block.vtx.into_iter() {
         let num_spends = tx.spends.len();
         let num_outputs = tx.outputs.len();
+
+        // Check for spent notes
+        let shielded_spends: Vec<_> = tx
+            .spends
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, spend)| {
+                if nullifiers.contains(&&spend.nf[..]) {
+                    Some(WalletShieldedSpend {
+                        index,
+                        nf: spend.nf,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
 
         // Check for incoming notes while incrementing tree and witnesses
         let mut shielded_outputs = vec![];
@@ -103,7 +121,7 @@ pub fn scan_block(
             }
         }
 
-        if !shielded_outputs.is_empty() {
+        if !(shielded_spends.is_empty() && shielded_outputs.is_empty()) {
             let mut txid = TxId([0u8; 32]);
             txid.0.copy_from_slice(&tx.hash);
             wtxs.push((
@@ -111,6 +129,7 @@ pub fn scan_block(
                     txid,
                     num_spends,
                     num_outputs,
+                    shielded_spends,
                     shielded_outputs,
                 },
                 new_witnesses,
@@ -128,11 +147,12 @@ pub fn scan_block(
 pub fn scan_block_from_bytes(
     block: &[u8],
     extfvks: &[ExtendedFullViewingKey],
+    nullifiers: &[&[u8]],
     tree: &mut CommitmentTree,
     witnesses: &mut [&mut IncrementalWitness],
 ) -> Vec<(WalletTx, Vec<IncrementalWitness>)> {
     let block: CompactBlock =
         parse_from_bytes(block).expect("Cannot convert into a `CompactBlock`");
 
-    scan_block(block, extfvks, tree, witnesses)
+    scan_block(block, extfvks, nullifiers, tree, witnesses)
 }
