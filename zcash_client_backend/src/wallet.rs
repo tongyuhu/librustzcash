@@ -16,6 +16,7 @@ pub struct WalletTx {
 pub struct WalletShieldedSpend {
     pub index: usize,
     pub nf: Vec<u8>,
+    pub account: usize,
 }
 
 pub struct WalletShieldedOutput {
@@ -25,4 +26,5 @@ pub struct WalletShieldedOutput {
     pub account: usize,
     pub note: Note<Bls12>,
     pub to: PaymentAddress<Bls12>,
+    pub is_change: bool,
 }
