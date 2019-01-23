@@ -1,6 +1,6 @@
 use failure::Error;
 use pairing::bls12_381::{Bls12, Fr};
-use rand::{OsRng, Rand};
+use rand::{OsRng, Rand, Rng};
 use sapling_crypto::{
     jubjub::fs::Fs,
     primitives::{Diversifier, Note, PaymentAddress},
@@ -37,6 +37,43 @@ struct OutputDescriptionInfo {
     to: PaymentAddress<Bls12>,
     note: Note<Bls12>,
     memo: Memo,
+}
+
+pub struct TransactionMetadata {
+    spend_indices: Vec<usize>,
+    output_indices: Vec<usize>,
+}
+
+/// Metadata about a transaction created by a builder.
+impl TransactionMetadata {
+    fn new() -> Self {
+        TransactionMetadata {
+            spend_indices: vec![],
+            output_indices: vec![],
+        }
+    }
+
+    /// Returns the index within the transaction of the SpendDescription corresponding to
+    /// the `n`-th call to Builder::add_sapling_spend.
+    ///
+    /// Note positions are randomized when building transactions for indistinguishability.
+    /// This means that the transaction consumer cannot assume that e.g. the first spend
+    /// they added (via the first call to add_sapling_spend) is the first SpendDescription
+    /// in the transaction.
+    pub fn spend_index(&self, n: usize) -> Option<usize> {
+        self.spend_indices.get(n).map(|i| *i)
+    }
+
+    /// Returns the index within the transaction of the SpendDescription corresponding to
+    /// the `n`-th call to Builder::add_sapling_spend.
+    ///
+    /// Note positions are randomized when building transactions for indistinguishability.
+    /// This means that the transaction consumer cannot assume that e.g. the first output
+    /// they added (via the first call to add_sapling_output) is the first
+    /// OutputDescription in the transaction.
+    pub fn output_index(&self, n: usize) -> Option<usize> {
+        self.output_indices.get(n).map(|i| *i)
+    }
 }
 
 /// Generates a Transaction from its inputs and outputs.
@@ -148,7 +185,9 @@ impl Builder {
         consensus_branch_id: u32,
         master: &ExtendedSpendingKey,
         prover: impl TxProver,
-    ) -> Result<Transaction, Error> {
+    ) -> Result<(Transaction, TransactionMetadata), Error> {
+        let mut tx_metadata = TransactionMetadata::new();
+
         //
         // Consistency checks
         //
@@ -188,11 +227,13 @@ impl Builder {
         //
 
         let coin_type = self.coin_type;
-        let spends: Vec<_> = self
+        let mut spends: Vec<_> = self
             .spends
             .into_iter()
-            .map(|spend| {
+            .enumerate()
+            .map(|(pos, spend)| {
                 (
+                    pos,
                     ExtendedSpendingKey::from_path(
                         &master,
                         &[
@@ -205,10 +246,11 @@ impl Builder {
                 )
             })
             .collect();
-        let outputs: Vec<_> = self
+        let mut outputs: Vec<_> = self
             .outputs
             .into_iter()
-            .map(|output| {
+            .enumerate()
+            .map(|(pos, output)| {
                 let xsk = ExtendedSpendingKey::from_path(
                     &master,
                     &[
@@ -217,7 +259,7 @@ impl Builder {
                         ChildIndex::Hardened(output.account_id),
                     ],
                 );
-                (ExtendedFullViewingKey::from(&xsk).fvk.ovk, output)
+                (pos, ExtendedFullViewingKey::from(&xsk).fvk.ovk, output)
             })
             .collect();
 
@@ -228,8 +270,15 @@ impl Builder {
         let mut ctx = SaplingProvingContext::new();
         let anchor = self.anchor.expect("anchor was set if spends were added");
 
+        // Randomize order of inputs and outputs
+        let mut rng = OsRng::new().expect("should be able to construct RNG");
+        rng.shuffle(&mut spends);
+        rng.shuffle(&mut outputs);
+        tx_metadata.spend_indices.resize(spends.len(), 0);
+        tx_metadata.output_indices.resize(outputs.len(), 0);
+
         // Create Sapling SpendDescriptions
-        for (xsk, spend) in spends.iter() {
+        for (i, (pos, xsk, spend)) in spends.iter().enumerate() {
             let proof_generation_key = xsk.expsk.proof_generation_key(&JUBJUB);
 
             let mut nullifier = [0u8; 32];
@@ -258,10 +307,13 @@ impl Builder {
                 zkproof,
                 spend_auth_sig: None,
             });
+
+            // Record the post-randomized spend location
+            tx_metadata.spend_indices[*pos] = i;
         }
 
         // Create Sapling OutputDescriptions
-        for (ovk, output) in outputs {
+        for (i, (pos, ovk, output)) in outputs.into_iter().enumerate() {
             let encryptor = SaplingNoteEncryption::new(
                 ovk,
                 output.note.clone(),
@@ -292,6 +344,9 @@ impl Builder {
                 out_ciphertext,
                 zkproof,
             });
+
+            // Record the post-randomized output location
+            tx_metadata.output_indices[pos] = i;
         }
 
         //
@@ -307,7 +362,7 @@ impl Builder {
         ));
 
         // Create Sapling spendAuth and binding signatures
-        for (i, (xsk, spend)) in spends.into_iter().enumerate() {
+        for (i, (_, xsk, spend)) in spends.into_iter().enumerate() {
             self.mtx.shielded_spends[i].spend_auth_sig = Some(spend_sig(
                 PrivateKey(xsk.expsk.ask),
                 spend.alpha,
@@ -320,7 +375,7 @@ impl Builder {
                 .map_err(|_| format_err!("Failed to create bindingSig"))?,
         );
 
-        Ok(self.mtx.freeze())
+        Ok((self.mtx.freeze(), tx_metadata))
     }
 }
 
