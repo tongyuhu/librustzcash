@@ -7,6 +7,7 @@ use zcash_primitives::transaction::TxId;
 
 pub struct WalletTx {
     pub txid: TxId,
+    pub index: usize,
     pub num_spends: usize,
     pub num_outputs: usize,
     pub shielded_spends: Vec<WalletShieldedSpend>,

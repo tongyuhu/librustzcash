@@ -154,6 +154,7 @@ pub fn scan_block(
             wtxs.push((
                 WalletTx {
                     txid,
+                    index: tx.index as usize,
                     num_spends,
                     num_outputs,
                     shielded_spends,
