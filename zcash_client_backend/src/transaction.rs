@@ -16,7 +16,7 @@ use zcash_primitives::{
     JUBJUB,
 };
 use zcash_proofs::sapling::SaplingProvingContext;
-use zip32::{ChildIndex, ExtendedFullViewingKey, ExtendedSpendingKey};
+use zip32::{ExtendedSpendingKey, OutgoingViewingKey};
 
 use note_encryption::{Memo, SaplingNoteEncryption};
 use prover::TxProver;
@@ -25,7 +25,7 @@ const DEFAULT_FEE: Amount = Amount(10000);
 const DEFAULT_TX_EXPIRY_DELTA: u32 = 20;
 
 struct SpendDescriptionInfo {
-    account_id: u32,
+    extsk: ExtendedSpendingKey,
     diversifier: Diversifier,
     note: Note<Bls12>,
     alpha: Fs,
@@ -33,7 +33,7 @@ struct SpendDescriptionInfo {
 }
 
 struct OutputDescriptionInfo {
-    account_id: u32,
+    ovk: OutgoingViewingKey,
     to: PaymentAddress<Bls12>,
     note: Note<Bls12>,
     memo: Memo,
@@ -79,22 +79,20 @@ impl TransactionMetadata {
 /// Generates a Transaction from its inputs and outputs.
 pub struct Builder {
     mtx: TransactionData,
-    coin_type: u32,
     fee: Amount,
     anchor: Option<Fr>,
     spends: Vec<SpendDescriptionInfo>,
     outputs: Vec<OutputDescriptionInfo>,
-    change_address: Option<(u32, PaymentAddress<Bls12>)>,
+    change_address: Option<(OutgoingViewingKey, PaymentAddress<Bls12>)>,
 }
 
 impl Builder {
-    pub fn new(coin_type: u32, height: u32) -> Builder {
+    pub fn new(height: u32) -> Builder {
         let mut mtx = TransactionData::new();
         mtx.expiry_height = height + DEFAULT_TX_EXPIRY_DELTA;
 
         Builder {
             mtx,
-            coin_type,
             fee: DEFAULT_FEE,
             anchor: None,
             spends: vec![],
@@ -110,7 +108,7 @@ impl Builder {
     /// Add a Sapling note to be spent in this transaction.
     pub fn add_sapling_spend(
         &mut self,
-        account_id: u32,
+        extsk: ExtendedSpendingKey,
         diversifier: Diversifier,
         note: Note<Bls12>,
         witness: IncrementalWitness,
@@ -135,7 +133,7 @@ impl Builder {
         self.mtx.value_balance.0 += note.value as i64;
 
         self.spends.push(SpendDescriptionInfo {
-            account_id,
+            extsk,
             diversifier,
             note,
             alpha,
@@ -145,11 +143,10 @@ impl Builder {
         Ok(())
     }
 
-    /// Add a Sapling address to send funds to. The account_id will be used to derive the
-    /// OutgoingViewingKey that the output will be encrypted to.
+    /// Add a Sapling address to send funds to.
     pub fn add_sapling_output(
         &mut self,
-        account_id: u32,
+        ovk: OutgoingViewingKey,
         to: PaymentAddress<Bls12>,
         value: Amount,
         memo: Option<Memo>,
@@ -171,7 +168,7 @@ impl Builder {
             r: rcm,
         };
         self.outputs.push(OutputDescriptionInfo {
-            account_id,
+            ovk,
             to,
             note,
             memo: memo.unwrap_or_default(),
@@ -183,7 +180,6 @@ impl Builder {
     pub fn build(
         mut self,
         consensus_branch_id: u32,
-        master: &ExtendedSpendingKey,
         prover: impl TxProver,
     ) -> Result<(Transaction, TransactionMetadata), Error> {
         let mut tx_metadata = TransactionMetadata::new();
@@ -209,7 +205,7 @@ impl Builder {
                 change_address
             } else if !self.spends.is_empty() {
                 (
-                    self.spends[0].account_id,
+                    self.spends[0].extsk.expsk.ovk,
                     PaymentAddress {
                         diversifier: self.spends[0].diversifier,
                         pk_d: self.spends[0].note.pk_d.clone(),
@@ -223,45 +219,10 @@ impl Builder {
         }
 
         //
-        // Sapling spending keys and outgoing viewing keys
+        // Record initial positions of spends and outputs
         //
-
-        let coin_type = self.coin_type;
-        let mut spends: Vec<_> = self
-            .spends
-            .into_iter()
-            .enumerate()
-            .map(|(pos, spend)| {
-                (
-                    pos,
-                    ExtendedSpendingKey::from_path(
-                        &master,
-                        &[
-                            ChildIndex::Hardened(32),
-                            ChildIndex::Hardened(coin_type),
-                            ChildIndex::Hardened(spend.account_id),
-                        ],
-                    ),
-                    spend,
-                )
-            })
-            .collect();
-        let mut outputs: Vec<_> = self
-            .outputs
-            .into_iter()
-            .enumerate()
-            .map(|(pos, output)| {
-                let xsk = ExtendedSpendingKey::from_path(
-                    &master,
-                    &[
-                        ChildIndex::Hardened(32),
-                        ChildIndex::Hardened(coin_type),
-                        ChildIndex::Hardened(output.account_id),
-                    ],
-                );
-                (pos, ExtendedFullViewingKey::from(&xsk).fvk.ovk, output)
-            })
-            .collect();
+        let mut spends: Vec<_> = self.spends.into_iter().enumerate().collect();
+        let mut outputs: Vec<_> = self.outputs.into_iter().enumerate().collect();
 
         //
         // Sapling spends and outputs
@@ -278,8 +239,8 @@ impl Builder {
         tx_metadata.output_indices.resize(outputs.len(), 0);
 
         // Create Sapling SpendDescriptions
-        for (i, (pos, xsk, spend)) in spends.iter().enumerate() {
-            let proof_generation_key = xsk.expsk.proof_generation_key(&JUBJUB);
+        for (i, (pos, spend)) in spends.iter().enumerate() {
+            let proof_generation_key = spend.extsk.expsk.proof_generation_key(&JUBJUB);
 
             let mut nullifier = [0u8; 32];
             nullifier.copy_from_slice(&spend.note.nf(
@@ -313,9 +274,9 @@ impl Builder {
         }
 
         // Create Sapling OutputDescriptions
-        for (i, (pos, ovk, output)) in outputs.into_iter().enumerate() {
+        for (i, (pos, output)) in outputs.into_iter().enumerate() {
             let encryptor = SaplingNoteEncryption::new(
-                ovk,
+                output.ovk,
                 output.note.clone(),
                 output.to.clone(),
                 output.memo,
@@ -362,9 +323,9 @@ impl Builder {
         ));
 
         // Create Sapling spendAuth and binding signatures
-        for (i, (_, xsk, spend)) in spends.into_iter().enumerate() {
+        for (i, (_, spend)) in spends.into_iter().enumerate() {
             self.mtx.shielded_spends[i].spend_auth_sig = Some(spend_sig(
-                PrivateKey(xsk.expsk.ask),
+                PrivateKey(spend.extsk.expsk.ask),
                 spend.alpha,
                 &sighash,
                 &JUBJUB,
@@ -398,29 +359,31 @@ mod tests {
     fn fails_on_negative_change() {
         let mut rng = OsRng::new().expect("should be able to construct RNG");
 
-        let master = ExtendedSpendingKey::master(&[]);
+        // Just use the master key as the ExtendedSpendingKey for this test
+        let extsk = ExtendedSpendingKey::master(&[]);
 
         // Fails with no inputs or outputs
         // 0.0001 t-ZEC fee
         {
-            let builder = Builder::new(1, 0);
-            match builder.build(1, &master, MockTxProver) {
+            let builder = Builder::new(0);
+            match builder.build(1, MockTxProver) {
                 Err(e) => assert_eq!(e.to_string(), "Change is negative: -10000"),
                 Ok(_) => panic!("Should have failed"),
             }
         }
 
-        let extfvk = ExtendedFullViewingKey::from(&master);
+        let extfvk = ExtendedFullViewingKey::from(&extsk);
+        let ovk = extfvk.fvk.ovk;
         let to = extfvk.default_address().unwrap().1;
 
         // Fail if there is only a Sapling output
         // 0.0005 z-ZEC out, 0.0001 t-ZEC fee
         {
-            let mut builder = Builder::new(1, 0);
+            let mut builder = Builder::new(0);
             builder
-                .add_sapling_output(0, to.clone(), Amount(50000), None)
+                .add_sapling_output(ovk.clone(), to.clone(), Amount(50000), None)
                 .unwrap();
-            match builder.build(1, &master, MockTxProver) {
+            match builder.build(1, MockTxProver) {
                 Err(e) => assert_eq!(e.to_string(), "Change is negative: -60000"),
                 Ok(_) => panic!("Should have failed"),
             }
@@ -435,14 +398,19 @@ mod tests {
         // Fail if there is only a Sapling output
         // 0.0005 z-ZEC out, 0.0001 t-ZEC fee, 0.00059999 z-ZEC in
         {
-            let mut builder = Builder::new(1, 0);
+            let mut builder = Builder::new(0);
             builder
-                .add_sapling_spend(0, to.diversifier, note1.clone(), witness1.clone())
+                .add_sapling_spend(
+                    extsk.clone(),
+                    to.diversifier,
+                    note1.clone(),
+                    witness1.clone(),
+                )
                 .unwrap();
             builder
-                .add_sapling_output(0, to.clone(), Amount(50000), None)
+                .add_sapling_output(ovk.clone(), to.clone(), Amount(50000), None)
                 .unwrap();
-            match builder.build(1, &master, MockTxProver) {
+            match builder.build(1, MockTxProver) {
                 Err(e) => assert_eq!(e.to_string(), "Change is negative: -1"),
                 Ok(_) => panic!("Should have failed"),
             }
@@ -460,17 +428,17 @@ mod tests {
         // (Still fails because we are using a MockTxProver which doesn't correctly update
         // the internals of SaplingProvingContext.)
         {
-            let mut builder = Builder::new(1, 0);
+            let mut builder = Builder::new(0);
             builder
-                .add_sapling_spend(0, to.diversifier, note1, witness1)
+                .add_sapling_spend(extsk.clone(), to.diversifier, note1, witness1)
                 .unwrap();
             builder
-                .add_sapling_spend(0, to.diversifier, note2, witness2)
+                .add_sapling_spend(extsk, to.diversifier, note2, witness2)
                 .unwrap();
             builder
-                .add_sapling_output(0, to, Amount(50000), None)
+                .add_sapling_output(ovk, to, Amount(50000), None)
                 .unwrap();
-            match builder.build(1, &master, MockTxProver) {
+            match builder.build(1, MockTxProver) {
                 Err(e) => assert_eq!(e.to_string(), "Failed to create bindingSig"),
                 Ok(_) => panic!("Should have failed"),
             }

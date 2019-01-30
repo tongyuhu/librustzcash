@@ -57,7 +57,7 @@ impl OutgoingViewingKey {
 pub struct ExpandedSpendingKey<E: JubjubEngine> {
     pub ask: E::Fs,
     nsk: E::Fs,
-    ovk: OutgoingViewingKey,
+    pub ovk: OutgoingViewingKey,
 }
 
 /// A Sapling full viewing key
