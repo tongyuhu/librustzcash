@@ -84,28 +84,22 @@ mod tests {
             "ztestsapling1qqqqqqqqqqqqqqqqqqxrrfaccydp867g6zg7ne5ht37z38jtfyw0ygmp0ja6hhf07twjq6awtaj";
 
         assert_eq!(
-            encode_payment_address(constants::HRP_SAPLING_EXTENDED_SPENDING_KEY_MAIN, &addr),
+            encode_payment_address(constants::HRP_SAPLING_PAYMENT_ADDRESS_MAIN, &addr),
             encoded_main
         );
         assert_eq!(
-            decode_payment_address(
-                constants::HRP_SAPLING_EXTENDED_SPENDING_KEY_MAIN,
-                encoded_main
-            )
-            .unwrap(),
+            decode_payment_address(constants::HRP_SAPLING_PAYMENT_ADDRESS_MAIN, encoded_main)
+                .unwrap(),
             addr
         );
 
         assert_eq!(
-            encode_payment_address(constants::HRP_SAPLING_EXTENDED_SPENDING_KEY_TEST, &addr),
+            encode_payment_address(constants::HRP_SAPLING_PAYMENT_ADDRESS_TEST, &addr),
             encoded_test
         );
         assert_eq!(
-            decode_payment_address(
-                constants::HRP_SAPLING_EXTENDED_SPENDING_KEY_TEST,
-                encoded_test
-            )
-            .unwrap(),
+            decode_payment_address(constants::HRP_SAPLING_PAYMENT_ADDRESS_TEST, encoded_test)
+                .unwrap(),
             addr
         );
     }

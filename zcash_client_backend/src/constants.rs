@@ -1,2 +1,2 @@
-pub const HRP_SAPLING_EXTENDED_SPENDING_KEY_MAIN: &str = "zs";
-pub const HRP_SAPLING_EXTENDED_SPENDING_KEY_TEST: &str = "ztestsapling";
+pub const HRP_SAPLING_PAYMENT_ADDRESS_MAIN: &str = "zs";
+pub const HRP_SAPLING_PAYMENT_ADDRESS_TEST: &str = "ztestsapling";
