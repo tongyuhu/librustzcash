@@ -6,6 +6,7 @@ use sapling_crypto::{
 };
 use std::io::{self, Write};
 use zcash_primitives::JUBJUB;
+use zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
 
 fn bech32_encode<F>(hrp: &str, write: F) -> String
 where
@@ -31,6 +32,28 @@ where
     } else {
         Ok(None)
     }
+}
+
+pub fn encode_extended_spending_key(hrp: &str, extsk: &ExtendedSpendingKey) -> String {
+    bech32_encode(hrp, |w| extsk.write(w))
+}
+
+pub fn decode_extended_spending_key(
+    hrp: &str,
+    s: &str,
+) -> Result<Option<ExtendedSpendingKey>, Error> {
+    bech32_decode(hrp, s, |data| ExtendedSpendingKey::read(&data[..]).ok())
+}
+
+pub fn encode_extended_full_viewing_key(hrp: &str, extfvk: &ExtendedFullViewingKey) -> String {
+    bech32_encode(hrp, |w| extfvk.write(w))
+}
+
+pub fn decode_extended_full_viewing_key(
+    hrp: &str,
+    s: &str,
+) -> Result<Option<ExtendedFullViewingKey>, Error> {
+    bech32_decode(hrp, s, |data| ExtendedFullViewingKey::read(&data[..]).ok())
 }
 
 pub fn encode_payment_address(hrp: &str, addr: &PaymentAddress<Bls12>) -> String {
