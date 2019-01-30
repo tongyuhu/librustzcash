@@ -33,9 +33,9 @@ extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
 
-pub mod address;
 pub mod constants;
 pub mod data;
+pub mod encoding;
 pub mod keystore;
 pub mod note_encryption;
 pub mod proto;

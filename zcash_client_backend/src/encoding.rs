@@ -5,16 +5,15 @@ use sapling_crypto::{
     jubjub::edwards,
     primitives::{Diversifier, PaymentAddress},
 };
-use std::io::Write;
+use std::io::{self, Write};
 use zcash_primitives::JUBJUB;
 
-pub fn encode_payment_address(hrp: &str, addr: &PaymentAddress<Bls12>) -> String {
-    let mut data: Vec<u8> = Vec::with_capacity(43);
-    data.write_all(&addr.diversifier.0)
-        .expect("Should be able to write to a Vec");
-    addr.pk_d
-        .write(&mut data)
-        .expect("Should be able to write to a Vec");
+fn bech32_encode<F>(hrp: &str, write: F) -> String
+where
+    F: Fn(&mut Write) -> io::Result<()>,
+{
+    let mut data: Vec<u8> = vec![];
+    write(&mut data).expect("Should be able to write to a Vec");
 
     let converted =
         convert_bits(&data, 8, 5, true).expect("Should be able to convert Vec<u8> to Vec<u5>");
@@ -23,10 +22,28 @@ pub fn encode_payment_address(hrp: &str, addr: &PaymentAddress<Bls12>) -> String
     encoded.to_string()
 }
 
-pub fn decode_payment_address(hrp: &str, s: &str) -> Result<PaymentAddress<Bls12>, Error> {
+fn bech32_decode<T, F>(hrp: &str, s: &str, read: F) -> Result<T, Error>
+where
+    F: Fn(Vec<u8>) -> Result<T, Error>,
+{
     let encoded = Bech32::from_str_lenient(s)?;
     if encoded.hrp() == hrp {
         let data = convert_bits(encoded.data(), 5, 8, false)?;
+        read(data)
+    } else {
+        Err(format_err!("Invalid HRP"))
+    }
+}
+
+pub fn encode_payment_address(hrp: &str, addr: &PaymentAddress<Bls12>) -> String {
+    bech32_encode(hrp, |w| {
+        w.write_all(&addr.diversifier.0)?;
+        addr.pk_d.write(w)
+    })
+}
+
+pub fn decode_payment_address(hrp: &str, s: &str) -> Result<PaymentAddress<Bls12>, Error> {
+    bech32_decode(hrp, s, |data| {
         let mut diversifier = Diversifier([0; 11]);
         diversifier.0.copy_from_slice(&data[0..11]);
         match edwards::Point::<Bls12, _>::read(&data[11..], &JUBJUB) {
@@ -36,9 +53,7 @@ pub fn decode_payment_address(hrp: &str, s: &str) -> Result<PaymentAddress<Bls12
             },
             Err(e) => Err(format_err!("{}", e)),
         }
-    } else {
-        Err(format_err!("Invalid HRP"))
-    }
+    })
 }
 
 #[cfg(test)]
