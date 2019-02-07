@@ -73,7 +73,7 @@ impl PartialEq for Memo {
 
 impl Memo {
     /// Returns a Memo containing the given string, or an error if the string is too long.
-    pub fn from_str(memo: &str) -> Result<Memo, ()> {
+    pub fn from_str(memo: &str) -> Result<Memo, Error> {
         if memo.is_empty() {
             Ok(Memo::default())
         } else if memo.len() <= 512 {
@@ -81,7 +81,7 @@ impl Memo {
             data[0..memo.len()].copy_from_slice(memo.as_bytes());
             Ok(Memo(data))
         } else {
-            Err(())
+            Err(format_err!("memo is too long"))
         }
     }
 
@@ -446,8 +446,8 @@ mod tests {
     #[test]
     fn memo_from_str() {
         assert_eq!(
-            Memo::from_str(""),
-            Ok(Memo([
+            Memo::from_str("").unwrap(),
+            Memo([
                 0xf6, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -485,7 +485,7 @@ mod tests {
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-            ]))
+            ])
         );
         assert_eq!(
             Memo::from_str(
@@ -496,8 +496,9 @@ mod tests {
                  looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong \
                  meeeeeeeeeeeeeeeeeeemooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo \
                  but it's just short enough"
-            ),
-            Ok(Memo([
+            )
+            .unwrap(),
+            Memo([
                 0x74, 0x68, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69,
                 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69,
                 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69,
@@ -535,20 +536,18 @@ mod tests {
                 0x6f, 0x6f, 0x6f, 0x6f, 0x6f, 0x6f, 0x6f, 0x6f, 0x6f, 0x20, 0x62, 0x75, 0x74, 0x20,
                 0x69, 0x74, 0x27, 0x73, 0x20, 0x6a, 0x75, 0x73, 0x74, 0x20, 0x73, 0x68, 0x6f, 0x72,
                 0x74, 0x20, 0x65, 0x6e, 0x6f, 0x75, 0x67, 0x68
-            ]))
+            ])
         );
-        assert_eq!(
-            Memo::from_str(
-                "thiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiis \
-                 iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiis \
-                 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
-                 veeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeryyyyyyyyyyyyyyyyyyyyyyyyyy \
-                 looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong \
-                 meeeeeeeeeeeeeeeeeeemooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo \
-                 but it's now a bit too long"
-            ),
-            Err(())
-        );
+        assert!(Memo::from_str(
+            "thiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiis \
+             iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiis \
+             aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+             veeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeryyyyyyyyyyyyyyyyyyyyyyyyyy \
+             looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong \
+             meeeeeeeeeeeeeeeeeeemooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo \
+             but it's now a bit too long"
+        )
+        .is_err());
     }
 
     #[test]
