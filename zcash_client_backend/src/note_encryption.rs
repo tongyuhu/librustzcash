@@ -48,21 +48,9 @@ pub struct Memo([u8; 512]);
 impl fmt::Debug for Memo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Memo(")?;
-        // Check if it is a text or binary memo
-        if self.0[0] < 0xF5 {
-            // Drop trailing zeroes
-            let mut data = &self.0[..];
-            while let Some((0, next)) = data.split_last() {
-                data = next;
-            }
-            // Check if it is valid UTF8
-            if let Ok(memo) = str::from_utf8(data) {
-                write!(f, "{}", memo)?;
-            } else {
-                fmt_colon_delimited_hex(f, &self.0[..])?;
-            }
-        } else {
-            fmt_colon_delimited_hex(f, &self.0[..])?;
+        match self.to_utf8() {
+            Ok(Some(memo)) => write!(f, "{}", memo)?,
+            _ => fmt_colon_delimited_hex(f, &self.0[..])?,
         }
         write!(f, ")")
     }
@@ -90,7 +78,7 @@ impl Memo {
             Ok(Memo::default())
         } else if memo.len() <= 512 {
             let mut data = [0; 512];
-            data.copy_from_slice(memo.as_bytes());
+            data[0..memo.len()].copy_from_slice(memo.as_bytes());
             Ok(Memo(data))
         } else {
             Err(())
@@ -99,6 +87,26 @@ impl Memo {
 
     pub fn as_bytes(&self) -> &[u8] {
         &self.0[..]
+    }
+
+    /// Returns:
+    /// - Ok(None) if the memo is not text
+    /// - Ok(Some(memo)) if the memo contains a valid UTF8 string
+    /// - Err(e) if the memo contains invalid UTF8
+    pub fn to_utf8(&self) -> Result<Option<String>, Error> {
+        // Check if it is a text or binary memo
+        if self.0[0] < 0xF5 {
+            // Drop trailing zeroes
+            let mut data = &self.0[..];
+            while let Some((0, next)) = data.split_last() {
+                data = next;
+            }
+            // Check if it is valid UTF8
+            let memo = str::from_utf8(data)?;
+            Ok(Some(memo.to_owned()))
+        } else {
+            Ok(None)
+        }
     }
 }
 
@@ -541,6 +549,13 @@ mod tests {
             ),
             Err(())
         );
+    }
+
+    #[test]
+    fn memo_to_utf8() {
+        let memo = Memo::from_str("Test memo").unwrap();
+        assert_eq!(memo.to_utf8().unwrap(), Some("Test memo".to_owned()));
+        assert_eq!(Memo::default().to_utf8().unwrap(), None);
     }
 
     #[test]
