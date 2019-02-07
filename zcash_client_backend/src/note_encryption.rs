@@ -72,17 +72,24 @@ impl PartialEq for Memo {
 }
 
 impl Memo {
-    /// Returns a Memo containing the given string, or an error if the string is too long.
-    pub fn from_str(memo: &str) -> Result<Memo, Error> {
+    /// Returns a Memo containing the given slice, appending with zero bytes if necessary,
+    /// or an error if the slice is too long. If the slice is empty, Memo::default() is
+    /// returned.
+    pub fn from_bytes(memo: &[u8]) -> Result<Memo, Error> {
         if memo.is_empty() {
             Ok(Memo::default())
         } else if memo.len() <= 512 {
             let mut data = [0; 512];
-            data[0..memo.len()].copy_from_slice(memo.as_bytes());
+            data[0..memo.len()].copy_from_slice(memo);
             Ok(Memo(data))
         } else {
             Err(format_err!("memo is too long"))
         }
+    }
+
+    /// Returns a Memo containing the given string, or an error if the string is too long.
+    pub fn from_str(memo: &str) -> Result<Memo, Error> {
+        Memo::from_bytes(memo.as_bytes())
     }
 
     pub fn as_bytes(&self) -> &[u8] {
