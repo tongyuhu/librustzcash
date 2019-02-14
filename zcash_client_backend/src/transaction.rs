@@ -155,6 +155,9 @@ impl Builder {
             Some(g_d) => g_d,
             None => return Err(format_err!("Invalid target address")),
         };
+        if value.0 < 0 {
+            return Err(format_err!("Can't send a negative amount"));
+        }
 
         let mut rng = OsRng::new().expect("should be able to construct RNG");
         let rcm = Fs::rand(&mut rng);
@@ -354,6 +357,20 @@ mod tests {
 
     use super::Builder;
     use crate::prover::mock::MockTxProver;
+
+    #[test]
+    fn fails_on_negative_output() {
+        let extsk = ExtendedSpendingKey::master(&[]);
+        let extfvk = ExtendedFullViewingKey::from(&extsk);
+        let ovk = extfvk.fvk.ovk;
+        let to = extfvk.default_address().unwrap().1;
+
+        let mut builder = Builder::new(0);
+        match builder.add_sapling_output(ovk, to, Amount(-1), None) {
+            Err(e) => assert_eq!(e.to_string(), "Can't send a negative amount"),
+            Ok(_) => panic!("Should have failed"),
+        }
+    }
 
     #[test]
     fn fails_on_negative_change() {
