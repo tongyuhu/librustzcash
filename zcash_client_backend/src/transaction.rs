@@ -18,11 +18,15 @@ use zcash_primitives::{
 use zcash_proofs::sapling::SaplingProvingContext;
 use zip32::{ExtendedSpendingKey, OutgoingViewingKey};
 
-use crate::note_encryption::{Memo, SaplingNoteEncryption};
+use crate::note_encryption::{generate_esk, Memo, SaplingNoteEncryption};
 use crate::prover::TxProver;
 
 const DEFAULT_FEE: Amount = Amount(10000);
 const DEFAULT_TX_EXPIRY_DELTA: u32 = 20;
+
+/// If there are any shielded inputs, always have at least two shielded outputs, padding
+/// with dummy outputs if necessary. See https://github.com/zcash/zcash/issues/3615
+const MIN_SHIELDED_OUTPUTS: usize = 2;
 
 struct SpendDescriptionInfo {
     extsk: ExtendedSpendingKey,
@@ -225,21 +229,34 @@ impl Builder {
         // Record initial positions of spends and outputs
         //
         let mut spends: Vec<_> = self.spends.into_iter().enumerate().collect();
-        let mut outputs: Vec<_> = self.outputs.into_iter().enumerate().collect();
+        let mut outputs: Vec<_> = self
+            .outputs
+            .into_iter()
+            .enumerate()
+            .map(|(i, o)| Some((i, o)))
+            .collect();
 
         //
         // Sapling spends and outputs
         //
 
+        let mut rng = OsRng::new().expect("should be able to construct RNG");
         let mut ctx = SaplingProvingContext::new();
         let anchor = self.anchor.expect("anchor was set if spends were added");
 
+        // Pad Sapling outputs
+        let orig_outputs_len = outputs.len();
+        if !spends.is_empty() {
+            while outputs.len() < MIN_SHIELDED_OUTPUTS {
+                outputs.push(None);
+            }
+        }
+
         // Randomize order of inputs and outputs
-        let mut rng = OsRng::new().expect("should be able to construct RNG");
         rng.shuffle(&mut spends);
         rng.shuffle(&mut outputs);
         tx_metadata.spend_indices.resize(spends.len(), 0);
-        tx_metadata.output_indices.resize(outputs.len(), 0);
+        tx_metadata.output_indices.resize(orig_outputs_len, 0);
 
         // Create Sapling SpendDescriptions
         for (i, (pos, spend)) in spends.iter().enumerate() {
@@ -277,40 +294,102 @@ impl Builder {
         }
 
         // Create Sapling OutputDescriptions
-        for (i, (pos, output)) in outputs.into_iter().enumerate() {
-            let encryptor = SaplingNoteEncryption::new(
-                output.ovk,
-                output.note.clone(),
-                output.to.clone(),
-                output.memo,
-            );
+        for (i, output) in outputs.into_iter().enumerate() {
+            let output_desc = if let Some((pos, output)) = output {
+                // Record the post-randomized output location
+                tx_metadata.output_indices[pos] = i;
 
-            let (zkproof, cv) = prover.output_proof(
-                &mut ctx,
-                encryptor.esk().clone(),
-                output.to,
-                output.note.r,
-                output.note.value,
-            );
+                let encryptor = SaplingNoteEncryption::new(
+                    output.ovk,
+                    output.note.clone(),
+                    output.to.clone(),
+                    output.memo,
+                );
 
-            let cmu = output.note.cm(&JUBJUB);
+                let (zkproof, cv) = prover.output_proof(
+                    &mut ctx,
+                    encryptor.esk().clone(),
+                    output.to,
+                    output.note.r,
+                    output.note.value,
+                );
 
-            let enc_ciphertext = encryptor.encrypt_note_plaintext();
-            let out_ciphertext = encryptor.encrypt_outgoing_plaintext(&cv, &cmu);
+                let cmu = output.note.cm(&JUBJUB);
 
-            let ephemeral_key = encryptor.epk().clone().into();
+                let enc_ciphertext = encryptor.encrypt_note_plaintext();
+                let out_ciphertext = encryptor.encrypt_outgoing_plaintext(&cv, &cmu);
 
-            self.mtx.shielded_outputs.push(OutputDescription {
-                cv,
-                cmu,
-                ephemeral_key,
-                enc_ciphertext,
-                out_ciphertext,
-                zkproof,
-            });
+                let ephemeral_key = encryptor.epk().clone().into();
 
-            // Record the post-randomized output location
-            tx_metadata.output_indices[pos] = i;
+                OutputDescription {
+                    cv,
+                    cmu,
+                    ephemeral_key,
+                    enc_ciphertext,
+                    out_ciphertext,
+                    zkproof,
+                }
+            } else {
+                // This is a dummy output
+                let (dummy_to, dummy_note) = {
+                    let (diversifier, g_d) = {
+                        let mut diversifier;
+                        let g_d;
+                        loop {
+                            let mut d = [0; 11];
+                            rng.fill_bytes(&mut d);
+                            diversifier = Diversifier(d);
+                            if let Some(val) = diversifier.g_d::<Bls12>(&JUBJUB) {
+                                g_d = val;
+                                break;
+                            }
+                        }
+                        (diversifier, g_d)
+                    };
+
+                    let pk_d = {
+                        let dummy_ivk = Fs::rand(&mut rng);
+                        g_d.mul(dummy_ivk, &JUBJUB)
+                    };
+
+                    (
+                        PaymentAddress {
+                            diversifier,
+                            pk_d: pk_d.clone(),
+                        },
+                        Note {
+                            g_d,
+                            pk_d,
+                            r: Fs::rand(&mut rng),
+                            value: 0,
+                        },
+                    )
+                };
+
+                let esk = generate_esk();
+                let epk = dummy_note.g_d.mul(esk, &JUBJUB);
+
+                let (zkproof, cv) =
+                    prover.output_proof(&mut ctx, esk, dummy_to, dummy_note.r, dummy_note.value);
+
+                let cmu = dummy_note.cm(&JUBJUB);
+
+                let mut enc_ciphertext = [0u8; 580];
+                let mut out_ciphertext = [0u8; 80];
+                rng.fill_bytes(&mut enc_ciphertext[..]);
+                rng.fill_bytes(&mut out_ciphertext[..]);
+
+                OutputDescription {
+                    cv,
+                    cmu,
+                    ephemeral_key: epk.into(),
+                    enc_ciphertext,
+                    out_ciphertext,
+                    zkproof,
+                }
+            };
+
+            self.mtx.shielded_outputs.push(output_desc);
         }
 
         //
