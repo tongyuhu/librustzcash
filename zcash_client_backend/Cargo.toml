@@ -16,3 +16,6 @@ zcash_primitives = { path = "../zcash_primitives" }
 
 [build-dependencies]
 protobuf-codegen-pure = "2"
+
+[dev-dependencies]
+rand = "0.4"
