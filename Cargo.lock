@@ -533,6 +533,7 @@ dependencies = [
  "pairing 0.14.2",
  "protobuf 2.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "protobuf-codegen-pure 2.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rand 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "sapling-crypto 0.0.1",
  "zcash_primitives 0.0.0",
  "zip32 0.0.0",
