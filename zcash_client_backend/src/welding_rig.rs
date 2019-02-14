@@ -39,6 +39,7 @@ fn scan_output(
     spent_from_accounts: &HashSet<usize>,
     tree: &mut CommitmentTree,
     existing_witnesses: &mut [&mut IncrementalWitness],
+    block_witnesses: &mut [&mut IncrementalWitness],
     new_witnesses: &mut [IncrementalWitness],
 ) -> Option<(WalletShieldedOutput, IncrementalWitness)> {
     let mut repr = FrRepr::default();
@@ -63,6 +64,9 @@ fn scan_output(
     // Increment tree and witnesses
     let node = Node::new(cmu.into_repr());
     for witness in existing_witnesses {
+        witness.append(node).unwrap();
+    }
+    for witness in block_witnesses {
         witness.append(node).unwrap();
     }
     for witness in new_witnesses {
@@ -111,7 +115,7 @@ pub fn scan_block(
     tree: &mut CommitmentTree,
     existing_witnesses: &mut [&mut IncrementalWitness],
 ) -> Vec<(WalletTx, Vec<IncrementalWitness>)> {
-    let mut wtxs = vec![];
+    let mut wtxs: Vec<(WalletTx, Vec<IncrementalWitness>)> = vec![];
     let ivks: Vec<_> = extfvks.iter().map(|extfvk| extfvk.fvk.vk.ivk()).collect();
 
     for tx in block.vtx.into_iter() {
@@ -149,17 +153,29 @@ pub fn scan_block(
         // Check for incoming notes while incrementing tree and witnesses
         let mut shielded_outputs = vec![];
         let mut new_witnesses = vec![];
-        for to_scan in tx.outputs.into_iter().enumerate() {
-            if let Some((output, new_witness)) = scan_output(
-                to_scan,
-                &ivks,
-                &spent_from_accounts,
-                tree,
-                existing_witnesses,
-                &mut new_witnesses,
-            ) {
-                shielded_outputs.push(output);
-                new_witnesses.push(new_witness);
+        {
+            // Grab mutable references to new witnesses from previous transactions
+            // in this block so that we can update them. Scoped so we don't hold
+            // mutable references to wtxs for too long.
+            let mut block_witnesses: Vec<_> = wtxs
+                .iter_mut()
+                .map(|(_, w)| w.iter_mut().collect::<Vec<_>>())
+                .flatten()
+                .collect();
+
+            for to_scan in tx.outputs.into_iter().enumerate() {
+                if let Some((output, new_witness)) = scan_output(
+                    to_scan,
+                    &ivks,
+                    &spent_from_accounts,
+                    tree,
+                    existing_witnesses,
+                    &mut block_witnesses,
+                    &mut new_witnesses,
+                ) {
+                    shielded_outputs.push(output);
+                    new_witnesses.push(new_witness);
+                }
             }
         }
 
@@ -198,4 +214,141 @@ pub fn scan_block_from_bytes(
         parse_from_bytes(block).expect("Cannot convert into a `CompactBlock`");
 
     scan_block(block, extfvks, nullifiers, tree, witnesses)
+}
+
+#[cfg(test)]
+mod tests {
+    use ff::{PrimeField, PrimeFieldRepr};
+    use pairing::bls12_381::{Bls12, Fr};
+    use rand::{thread_rng, Rand, Rng};
+    use sapling_crypto::{
+        jubjub::{fs::Fs, FixedGenerators, JubjubParams, ToUniform},
+        primitives::Note,
+    };
+    use zcash_primitives::{merkle_tree::CommitmentTree, transaction::components::Amount, JUBJUB};
+    use zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
+
+    use super::scan_block;
+    use crate::{
+        note_encryption::{Memo, SaplingNoteEncryption},
+        proto::compact_formats::{CompactBlock, CompactOutput, CompactTx},
+    };
+
+    fn random_compact_tx<R: Rng>(rng: &mut R) -> CompactTx {
+        let fake_cmu = {
+            let fake_cmu = Fr::rand(rng);
+            let mut bytes = vec![];
+            fake_cmu.into_repr().write_le(&mut bytes).unwrap();
+            bytes
+        };
+        let fake_epk = {
+            let mut buffer = vec![0; 64];
+            rng.fill_bytes(&mut buffer);
+            let fake_esk = Fs::to_uniform(&buffer[..]);
+            let fake_epk = JUBJUB
+                .generator(FixedGenerators::SpendingKeyGenerator)
+                .mul(fake_esk, &JUBJUB);
+            let mut bytes = vec![];
+            fake_epk.write(&mut bytes).unwrap();
+            bytes
+        };
+        let mut cout = CompactOutput::new();
+        cout.set_cmu(fake_cmu);
+        cout.set_epk(fake_epk);
+        cout.set_ciphertext(vec![0; 52]);
+        let mut ctx = CompactTx::new();
+        let mut txid = vec![0; 32];
+        rng.fill_bytes(&mut txid);
+        ctx.set_hash(txid);
+        ctx.outputs.push(cout);
+        ctx
+    }
+
+    /// Create a fake CompactBlock at the given height, containing a single output paying
+    /// the given address. Returns the CompactBlock and the nullifier for the new note.
+    fn fake_compact_block(
+        height: i32,
+        extfvk: ExtendedFullViewingKey,
+        value: Amount,
+        tx_after: bool,
+    ) -> CompactBlock {
+        let to = extfvk.default_address().unwrap().1;
+
+        // Create a fake Note for the account
+        let mut rng = thread_rng();
+        let note = Note {
+            g_d: to.diversifier.g_d::<Bls12>(&JUBJUB).unwrap(),
+            pk_d: to.pk_d.clone(),
+            value: value.0 as u64,
+            r: Fs::rand(&mut rng),
+        };
+        let encryptor =
+            SaplingNoteEncryption::new(extfvk.fvk.ovk, note.clone(), to.clone(), Memo::default());
+        let mut cmu = vec![];
+        note.cm(&JUBJUB).into_repr().write_le(&mut cmu).unwrap();
+        let mut epk = vec![];
+        encryptor.epk().write(&mut epk).unwrap();
+        let enc_ciphertext = encryptor.encrypt_note_plaintext();
+
+        // Create a fake CompactBlock containing the note
+        let mut cb = CompactBlock::new();
+        cb.set_height(height as u64);
+
+        // Add a random Sapling tx before ours
+        cb.vtx.push(random_compact_tx(&mut rng));
+
+        let mut cout = CompactOutput::new();
+        cout.set_cmu(cmu);
+        cout.set_epk(epk);
+        cout.set_ciphertext(enc_ciphertext[..52].to_vec());
+        let mut ctx = CompactTx::new();
+        let mut txid = vec![0; 32];
+        rng.fill_bytes(&mut txid);
+        ctx.set_hash(txid);
+        ctx.outputs.push(cout);
+        cb.vtx.push(ctx);
+
+        // Optionally add another random Sapling tx after ours
+        if tx_after {
+            cb.vtx.push(random_compact_tx(&mut rng));
+        }
+
+        cb
+    }
+
+    #[test]
+    fn scan_block_with_my_tx() {
+        let extsk = ExtendedSpendingKey::master(&[]);
+        let extfvk = ExtendedFullViewingKey::from(&extsk);
+
+        let cb = fake_compact_block(1, extfvk.clone(), Amount(5), false);
+
+        let mut tree = CommitmentTree::new();
+        let txs = scan_block(cb, &[extfvk], &[], &mut tree, &mut []);
+
+        // Check after each output that the roots all match
+        for (_, new_witnesses) in txs {
+            for witness in new_witnesses {
+                assert_eq!(witness.root(), tree.root());
+            }
+        }
+    }
+
+    #[test]
+    fn scan_block_with_txs_after_my_tx() {
+        let extsk = ExtendedSpendingKey::master(&[]);
+        let extfvk = ExtendedFullViewingKey::from(&extsk);
+
+        let cb = fake_compact_block(1, extfvk.clone(), Amount(5), true);
+
+        let mut tree = CommitmentTree::new();
+        let txs = scan_block(cb, &[extfvk], &[], &mut tree, &mut []);
+
+        // Check after each output that the roots all match
+        for (_, new_witnesses) in txs {
+            for witness in new_witnesses {
+                assert_eq!(witness.root(), tree.root());
+            }
+        }
+    }
 }
