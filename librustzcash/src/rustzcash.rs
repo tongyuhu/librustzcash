@@ -1143,6 +1143,19 @@ pub struct SaplingProvingContext {
 }
 
 #[no_mangle]
+pub extern "system" fn librustzcash_sapling_proving_ctx_bsk(
+    ctx: *const SaplingProvingContext,
+    result: *mut [c_uchar; 32],
+) {
+    // Grab the current `bsk` from the context
+    let bsk = redjubjub::PrivateKey::<Bls12>(unsafe { &*ctx }.bsk);
+
+    // Write out bsk
+    bsk.write(&mut (unsafe { &mut *result })[..])
+        .expect("result should be 32 bytes");
+}
+
+#[no_mangle]
 pub extern "system" fn librustzcash_sapling_output_proof(
     ctx: *mut SaplingProvingContext,
     esk: *const [c_uchar; 32],
