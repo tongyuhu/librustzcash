@@ -87,6 +87,13 @@ extern "C" {
     /// Creates a Sapling proving context. Please free this when you're done.
     void * librustzcash_sapling_proving_ctx_init();
 
+    /// Creates a Sapling proving context from the given bsk. Please free
+    /// this when you're done.
+    void * librustzcash_sapling_proving_ctx_init_from_bsk_bvk(
+        const unsigned char *bsk,
+        const unsigned char *bvk
+    );
+
     /// Returns the value of bsk contained in the given proving context.
     void librustzcash_sapling_proving_ctx_bsk(
         const void *ctx,

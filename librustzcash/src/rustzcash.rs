@@ -1646,6 +1646,26 @@ pub extern "system" fn librustzcash_sapling_proving_ctx_init() -> *mut SaplingPr
 }
 
 #[no_mangle]
+pub extern "system" fn librustzcash_sapling_proving_ctx_init_from_bsk_bvk(
+    bsk: *const [c_uchar; 32],
+    bvk: *const [c_uchar; 32],
+) -> *mut SaplingProvingContext {
+    let bsk = match Fs::from_repr(read_fs(&(unsafe { &*bsk })[..])) {
+        Ok(p) => p,
+        Err(_) => return std::ptr::null_mut(),
+    };
+
+    let bvk = match edwards::Point::<Bls12, Unknown>::read(&(unsafe { &*bvk })[..], &JUBJUB) {
+        Ok(p) => p,
+        Err(_) => return std::ptr::null_mut(),
+    };
+
+    let ctx = Box::new(SaplingProvingContext { bsk, bvk });
+
+    Box::into_raw(ctx)
+}
+
+#[no_mangle]
 pub extern "system" fn librustzcash_sapling_proving_ctx_free(ctx: *mut SaplingProvingContext) {
     drop(unsafe { Box::from_raw(ctx) });
 }
