@@ -92,6 +92,11 @@ extern "C" {
         const void *ctx,
         unsigned char *bsk);
 
+    /// Returns the value of bvk contained in the given proving context.
+    void librustzcash_sapling_proving_ctx_bvk(
+        const void *ctx,
+        unsigned char *bvk);
+
     /// This function (using the proving context) constructs a Spend proof
     /// given the necessary witness information. It outputs `cv` (the value
     /// commitment) and `rk` (so that you don't have to compute it) along

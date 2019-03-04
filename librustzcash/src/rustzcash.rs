@@ -1156,6 +1156,16 @@ pub extern "system" fn librustzcash_sapling_proving_ctx_bsk(
 }
 
 #[no_mangle]
+pub extern "system" fn librustzcash_sapling_proving_ctx_bvk(
+    ctx: *const SaplingProvingContext,
+    result: *mut [c_uchar; 32],
+) {
+    // Write out bvk
+    unsafe { &*ctx }.bvk.write(&mut (unsafe { &mut *result })[..])
+        .expect("result should be 32 bytes");
+}
+
+#[no_mangle]
 pub extern "system" fn librustzcash_sapling_output_proof(
     ctx: *mut SaplingProvingContext,
     esk: *const [c_uchar; 32],
