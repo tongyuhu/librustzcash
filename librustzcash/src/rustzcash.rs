@@ -1173,6 +1173,7 @@ pub extern "system" fn librustzcash_sapling_output_proof(
     pk_d: *const [c_uchar; 32],
     rcm: *const [c_uchar; 32],
     value: uint64_t,
+    rcv_out: *mut [c_uchar; 32],
     cv: *mut [c_uchar; 32],
     zkproof: *mut [c_uchar; GROTH_PROOF_SIZE],
 ) -> bool {
@@ -1216,6 +1217,11 @@ pub extern "system" fn librustzcash_sapling_output_proof(
     // randomness is not given back to the caller, but the synthetic
     // blinding factor `bsk` is accumulated in the context.
     let rcv = Fs::rand(&mut rng);
+
+    // Write rcv to caller
+    rcv.into_repr()
+        .write_le(&mut unsafe { &mut *rcv_out }[..])
+        .expect("should be able to serialize rcv");
 
     // Accumulate the value commitment randomness in the context
     {
@@ -1396,6 +1402,7 @@ pub extern "system" fn librustzcash_sapling_spend_proof(
     value: uint64_t,
     anchor: *const [c_uchar; 32],
     witness: *const [c_uchar; 1 + 33 * SAPLING_TREE_DEPTH + 8],
+    rcv_out: *mut [c_uchar; 32],
     cv: *mut [c_uchar; 32],
     rk_out: *mut [c_uchar; 32],
     zkproof: *mut [c_uchar; GROTH_PROOF_SIZE],
@@ -1621,6 +1628,11 @@ pub extern "system" fn librustzcash_sapling_spend_proof(
         // Update the context
         unsafe { &mut *ctx }.bvk = tmp;
     }
+
+    // Write rcv to caller
+    rcv.into_repr()
+        .write_le(&mut unsafe { &mut *rcv_out }[..])
+        .expect("should be able to serialize rcv");
 
     // Write value commitment to caller
     value_commitment
