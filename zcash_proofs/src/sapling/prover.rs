@@ -32,6 +32,19 @@ impl SaplingProvingContext {
         }
     }
 
+    /// Construct a new context to be used with a partially-created transaction.
+    pub fn from_partial(bsk: Fs, bvk: edwards::Point<Bls12, Unknown>) -> Self {
+        SaplingProvingContext { bsk, bvk }
+    }
+
+    pub fn bsk(&self) -> &Fs {
+        &self.bsk
+    }
+
+    pub fn bvk(&self) -> &edwards::Point<Bls12, Unknown> {
+        &self.bvk
+    }
+
     /// Create the value commitment, re-randomized key, and proof for a Sapling
     /// SpendDescription, while accumulating its value commitment randomness
     /// inside the context for later use.
@@ -183,7 +196,7 @@ impl SaplingProvingContext {
         value: u64,
         proving_key: &Parameters<Bls12>,
         params: &JubjubBls12,
-    ) -> (Proof<Bls12>, edwards::Point<Bls12, Unknown>) {
+    ) -> (Proof<Bls12>, Fs, edwards::Point<Bls12, Unknown>) {
         // Initialize secure RNG
         let mut rng = OsRng::new().expect("should be able to construct RNG");
 
@@ -234,7 +247,7 @@ impl SaplingProvingContext {
             self.bvk = tmp;
         }
 
-        (proof, value_commitment)
+        (proof, rcv, value_commitment)
     }
 
     /// Create the bindingSig for a Sapling transaction. All calls to spend_proof()

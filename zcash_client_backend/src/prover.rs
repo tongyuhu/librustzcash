@@ -117,7 +117,7 @@ impl TxProver for LocalTxProver {
         rcm: Fs,
         value: u64,
     ) -> ([u8; GROTH_PROOF_SIZE], edwards::Point<Bls12, Unknown>) {
-        let (proof, cv) = ctx.output_proof(
+        let (proof, _, cv) = ctx.output_proof(
             esk,
             payment_address,
             rcm,
