@@ -1,16 +1,22 @@
 use ff::{PrimeField, PrimeFieldRepr};
+use pairing::bls12_381::Bls12;
 use protobuf::parse_from_bytes;
 use rusqlite::{types::ToSql, Connection, NO_PARAMS};
+use sapling_crypto::{
+    jubjub::fs::{Fs, FsRepr},
+    primitives::{Diversifier, Note, PaymentAddress},
+};
 use std::cmp;
 use std::error;
 use std::fmt;
 use std::path::Path;
 use zcash_primitives::{
     merkle_tree::{CommitmentTree, IncrementalWitness, Node},
+    note_encryption::Memo,
     transaction::{components::Amount, TxId},
     JUBJUB,
 };
-use zip32::ExtendedFullViewingKey;
+use zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
 
 use crate::{
     constants::{HRP_SAPLING_EXTENDED_FULL_VIEWING_KEY_TEST, HRP_SAPLING_PAYMENT_ADDRESS_TEST},
@@ -18,6 +24,8 @@ use crate::{
         decode_extended_full_viewing_key, encode_extended_full_viewing_key, encode_payment_address,
     },
     proto::compact_formats::CompactBlock,
+    prover::TxProver,
+    transaction::{Builder, DEFAULT_FEE},
     welding_rig::scan_block,
 };
 
@@ -27,12 +35,17 @@ const SAPLING_ACTIVATION_HEIGHT: i32 = 280_000;
 #[derive(Debug)]
 pub enum ErrorKind {
     IncorrectHRPExtFVK,
+    InsufficientBalance(u64, u64),
+    InvalidExtSK(u32),
     InvalidHeight(i32, i32),
+    InvalidMemo(std::str::Utf8Error),
     InvalidNewWitnessAnchor(usize, TxId, i32, Node),
+    InvalidNote,
     InvalidWitnessAnchor(i64, i32),
     ScanRequired,
     TableNotEmpty,
     Bech32(bech32::Error),
+    Builder(crate::transaction::Error),
     Database(rusqlite::Error),
     IO(std::io::Error),
     Protobuf(protobuf::ProtobufError),
@@ -45,16 +58,26 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.0 {
             ErrorKind::IncorrectHRPExtFVK => write!(f, "Incorrect HRP for extfvk"),
+            ErrorKind::InsufficientBalance(have, need) => write!(
+                f,
+                "Insufficient balance (have {}, need {} including fee)",
+                have, need
+            ),
+            ErrorKind::InvalidExtSK(account) => {
+                write!(f, "Incorrect ExtendedSpendingKey for account {}", account)
+            }
             ErrorKind::InvalidHeight(expected, actual) => write!(
                 f,
                 "Expected height of next CompactBlock to be {}, but was {}",
                 expected, actual
             ),
+            ErrorKind::InvalidMemo(e) => write!(f, "{}", e),
             ErrorKind::InvalidNewWitnessAnchor(output, txid, last_height, anchor) => write!(
                 f,
                 "New witness for output {} in tx {} has incorrect anchor after scanning block {}: {:?}",
                 output, txid, last_height, anchor,
             ),
+            ErrorKind::InvalidNote => write!(f, "Invalid note"),
             ErrorKind::InvalidWitnessAnchor(id_note, last_height) => write!(
                 f,
                 "Witness for note {} has incorrect anchor after scanning block {}",
@@ -63,6 +86,7 @@ impl fmt::Display for Error {
             ErrorKind::ScanRequired => write!(f, "Must scan blocks first"),
             ErrorKind::TableNotEmpty => write!(f, "Table is not empty"),
             ErrorKind::Bech32(e) => write!(f, "{}", e),
+            ErrorKind::Builder(e) => write!(f, "{:?}", e),
             ErrorKind::Database(e) => write!(f, "{}", e),
             ErrorKind::IO(e) => write!(f, "{}", e),
             ErrorKind::Protobuf(e) => write!(f, "{}", e),
@@ -75,6 +99,12 @@ impl error::Error for Error {}
 impl From<bech32::Error> for Error {
     fn from(e: bech32::Error) -> Self {
         Error(ErrorKind::Bech32(e))
+    }
+}
+
+impl From<crate::transaction::Error> for Error {
+    fn from(e: crate::transaction::Error) -> Self {
+        Error(ErrorKind::Builder(e))
     }
 }
 
@@ -618,6 +648,228 @@ pub fn scan_cached_blocks<P: AsRef<Path>, Q: AsRef<Path>>(
     Ok(())
 }
 
+struct SelectedNoteRow {
+    diversifier: Diversifier,
+    note: Note<Bls12>,
+    witness: IncrementalWitness,
+}
+
+/// Creates a transaction paying the specified address.
+///
+/// Do not call this multiple times in parallel, or you will generate transactions that
+/// double-spend the same notes.
+pub fn send_to_address<P: AsRef<Path>>(
+    db_data: P,
+    consensus_branch_id: u32,
+    prover: impl TxProver,
+    (account, extsk): (u32, &ExtendedSpendingKey),
+    to: &PaymentAddress<Bls12>,
+    value: Amount,
+    memo: Option<Memo>,
+) -> Result<i64, Error> {
+    let data = Connection::open(db_data)?;
+
+    // Check that the ExtendedSpendingKey we have been given corresponds to the
+    // ExtendedFullViewingKey for the account we are spending from.
+    let extfvk = ExtendedFullViewingKey::from(extsk);
+    if !data
+        .prepare("SELECT * FROM accounts WHERE account = ? AND extfvk = ?")?
+        .exists(&[
+            account.to_sql()?,
+            encode_extended_full_viewing_key(HRP_SAPLING_EXTENDED_FULL_VIEWING_KEY_TEST, &extfvk)
+                .to_sql()?,
+        ])?
+    {
+        return Err(Error(ErrorKind::InvalidExtSK(account)));
+    }
+    let ovk = extfvk.fvk.ovk;
+
+    // Target the next block, assuming we are up-to-date.
+    let (height, anchor_height) = {
+        let (target_height, anchor_height) = get_target_and_anchor_heights(&data)?;
+        (target_height, i64::from(anchor_height))
+    };
+
+    // The goal of this SQL statement is to select the oldest notes until the required
+    // value has been reached, and then fetch the witnesses at the desired height for the
+    // selected notes. This is achieved in several steps:
+    //
+    // 1) Use a window function to create a view of all notes, ordered from oldest to
+    //    newest, with an additional column containing a running sum:
+    //    - Unspent notes accumulate the values of all unspent notes in that note's
+    //      account, up to itself.
+    //    - Spent notes accumulate the values of all notes in the transaction they were
+    //      spent in, up to itself.
+    //
+    // 2) Select all unspent notes in the desired account, along with their running sum.
+    //
+    // 3) Select all notes for which the running sum was less than the required value, as
+    //    well as a single note for which the sum was greater than or equal to the
+    //    required value, bringing the sum of all selected notes across the threshold.
+    //
+    // 4) Match the selected notes against the witnesses at the desired height.
+    let target_value = value.0 + DEFAULT_FEE.0;
+    let mut stmt_select_notes = data.prepare(
+        "WITH selected AS (
+            WITH eligible AS (
+                SELECT id_note, diversifier, value, rcm,
+                    SUM(value) OVER
+                        (PARTITION BY account, spent ORDER BY id_note) AS so_far
+                FROM received_notes
+                INNER JOIN transactions ON transactions.id_tx = received_notes.tx
+                WHERE account = ? AND spent IS NULL AND transactions.block <= ?
+            )
+            SELECT * FROM eligible WHERE so_far < ?
+            UNION
+            SELECT * FROM (SELECT * FROM eligible WHERE so_far >= ? LIMIT 1)
+        ), witnesses AS (
+            SELECT note, witness FROM sapling_witnesses
+            WHERE block = ?
+        )
+        SELECT selected.diversifier, selected.value, selected.rcm, witnesses.witness
+        FROM selected
+        INNER JOIN witnesses ON selected.id_note = witnesses.note",
+    )?;
+
+    // Select notes
+    let notes = stmt_select_notes.query_and_then::<_, Error, _, _>(
+        &[
+            i64::from(account),
+            anchor_height,
+            target_value,
+            target_value,
+            anchor_height,
+        ],
+        |row| {
+            let mut diversifier = Diversifier([0; 11]);
+            let d: Vec<_> = row.get(0);
+            diversifier.0.copy_from_slice(&d);
+
+            let note_value: i64 = row.get(1);
+
+            let d: Vec<_> = row.get(2);
+            let rcm = {
+                let mut tmp = FsRepr::default();
+                tmp.read_le(&d[..])?;
+                Fs::from_repr(tmp).map_err(|_| Error(ErrorKind::InvalidNote))?
+            };
+
+            let from = extfvk
+                .fvk
+                .vk
+                .into_payment_address(diversifier, &JUBJUB)
+                .unwrap();
+            let note = from.create_note(note_value as u64, rcm, &JUBJUB).unwrap();
+
+            let d: Vec<_> = row.get(3);
+            let witness = IncrementalWitness::read(&d[..])?;
+
+            Ok(SelectedNoteRow {
+                diversifier,
+                note,
+                witness,
+            })
+        },
+    )?;
+    let notes: Vec<SelectedNoteRow> = notes.collect::<Result<_, _>>()?;
+
+    // Confirm we were able to select sufficient value
+    let selected_value = notes
+        .iter()
+        .fold(0, |acc, selected| acc + selected.note.value);
+    if selected_value < target_value as u64 {
+        return Err(Error(ErrorKind::InsufficientBalance(
+            selected_value,
+            target_value as u64,
+        )));
+    }
+
+    // Create the transaction
+    let mut builder = Builder::new(height);
+    for selected in notes {
+        builder.add_sapling_spend(
+            extsk.clone(),
+            selected.diversifier,
+            selected.note,
+            selected.witness,
+        )?;
+    }
+    builder.add_sapling_output(ovk, to.clone(), value, memo.clone())?;
+    let (tx, tx_metadata) = builder.build(consensus_branch_id, prover)?;
+    // We only called add_sapling_output() once.
+    let output_index = match tx_metadata.output_index(0) {
+        Some(idx) => idx as i64,
+        None => panic!("Output 0 should exist in the transaction"),
+    };
+    let created = time::get_time();
+
+    // Update the database atomically, to ensure the result is internally consistent.
+    data.execute("BEGIN IMMEDIATE", NO_PARAMS)?;
+
+    // Save the transaction in the database.
+    let mut raw_tx = vec![];
+    tx.write(&mut raw_tx)?;
+    let mut stmt_insert_tx = data.prepare(
+        "INSERT INTO transactions (txid, created, expiry_height, raw)
+        VALUES (?, ?, ?, ?)",
+    )?;
+    stmt_insert_tx.execute(&[
+        tx.txid().0.to_sql()?,
+        created.to_sql()?,
+        tx.expiry_height.to_sql()?,
+        raw_tx.to_sql()?,
+    ])?;
+    let id_tx = data.last_insert_rowid();
+
+    // Mark notes as spent.
+    //
+    // This locks the notes so they aren't selected again by a subsequent call to
+    // send_to_address() before this transaction has been mined (at which point the notes
+    // get re-marked as spent).
+    //
+    // Assumes that send_to_address() will never be called in parallel, which is a
+    // reasonable assumption for a light client such as a mobile phone.
+    let mut stmt_mark_spent_note =
+        data.prepare("UPDATE received_notes SET spent = ? WHERE nf = ?")?;
+    for spend in &tx.shielded_spends {
+        stmt_mark_spent_note.execute(&[id_tx.to_sql()?, spend.nullifier.to_sql()?])?;
+    }
+
+    // Save the sent note in the database.
+    let to_str = encode_payment_address(HRP_SAPLING_PAYMENT_ADDRESS_TEST, to);
+    if let Some(memo) = memo {
+        let mut stmt_insert_sent_note = data.prepare(
+            "INSERT INTO sent_notes (tx, output_index, from_account, address, value, memo)
+            VALUES (?, ?, ?, ?, ?, ?)",
+        )?;
+        stmt_insert_sent_note.execute(&[
+            id_tx.to_sql()?,
+            output_index.to_sql()?,
+            account.to_sql()?,
+            to_str.to_sql()?,
+            value.0.to_sql()?,
+            memo.as_bytes().to_sql()?,
+        ])?;
+    } else {
+        let mut stmt_insert_sent_note = data.prepare(
+            "INSERT INTO sent_notes (tx, output_index, from_account, address, value)
+            VALUES (?, ?, ?, ?, ?)",
+        )?;
+        stmt_insert_sent_note.execute(&[
+            id_tx.to_sql()?,
+            output_index.to_sql()?,
+            account.to_sql()?,
+            to_str.to_sql()?,
+            value.0.to_sql()?,
+        ])?;
+    }
+
+    data.execute("COMMIT", NO_PARAMS)?;
+
+    // Return the row number of the transaction, so the caller can fetch it for sending.
+    Ok(id_tx)
+}
+
 #[cfg(test)]
 mod tests {
     use ff::{PrimeField, PrimeFieldRepr};
@@ -640,14 +892,40 @@ mod tests {
 
     use super::{
         get_address, get_balance, get_verified_balance, init_accounts_table, init_blocks_table,
-        init_cache_database, init_data_database, scan_cached_blocks, ErrorKind,
+        init_cache_database, init_data_database, scan_cached_blocks, send_to_address, ErrorKind,
         SAPLING_ACTIVATION_HEIGHT,
     };
     use crate::{
         constants::HRP_SAPLING_PAYMENT_ADDRESS_TEST,
         encoding::decode_payment_address,
         proto::compact_formats::{CompactBlock, CompactOutput, CompactSpend, CompactTx},
+        prover::{LocalTxProver, TxProver},
     };
+
+    fn test_prover() -> impl TxProver {
+        let unix_params_dir = dirs::home_dir().map(|path| path.join(".zcash-params"));
+        let win_osx_params_dir = dirs::data_dir().map(|path| path.join("ZcashParams"));
+        let (spend_path, output_path) = match (unix_params_dir, win_osx_params_dir) {
+            (Some(ref params_dir), _) if params_dir.exists() => (
+                params_dir.join("sapling-spend.params"),
+                params_dir.join("sapling-output.params"),
+            ),
+            (_, Some(ref params_dir)) if params_dir.exists() => (
+                params_dir.join("sapling-spend.params"),
+                params_dir.join("sapling-output.params"),
+            ),
+            _ => {
+                panic!("Cannot locate the Zcash parameters. Please run zcash-fetch-params or fetch-params.sh to download the parameters, and then re-run the tests.");
+            }
+        };
+
+        LocalTxProver::new(
+            &spend_path,
+            "8270785a1a0d0bc77196f000ee6d221c9c9894f55307bd9357c3f0105d31ca63991ab91324160d8f53e2bbd3c2633a6eb8bdf5205d822e7f3f73edac51b2b70c",
+            &output_path,
+            "657e3d38dbb5cb5e7dd2970e8b03d69b4787dd907285b5a7f0790dcc8072f60bf593b32cc2d1c030e00ff5ae64bf84c5c3beb84ddc841d48264b4a171744d028",
+        )
+    }
 
     /// Create a fake CompactBlock at the given height, containing a single output paying
     /// the given address. Returns the CompactBlock and the nullifier for the new note.
@@ -994,5 +1272,293 @@ mod tests {
         // Account balance should equal the change
         // TODO: impl Sum for Amount
         assert_eq!(get_balance(db_data, 0).unwrap(), Amount(value.0 - value2.0));
+    }
+
+    #[test]
+    fn send_to_address_fails_on_incorrect_extsk() {
+        let data_file = NamedTempFile::new().unwrap();
+        let db_data = data_file.path();
+        init_data_database(&db_data).unwrap();
+
+        // Add two accounts to the wallet
+        let extsk0 = ExtendedSpendingKey::master(&[]);
+        let extsk1 = ExtendedSpendingKey::master(&[0]);
+        let extfvks = [
+            ExtendedFullViewingKey::from(&extsk0),
+            ExtendedFullViewingKey::from(&extsk1),
+        ];
+        init_accounts_table(&db_data, &extfvks).unwrap();
+        let to = extsk0.default_address().unwrap().1;
+
+        // Invalid extsk for the given account should cause an error
+        match send_to_address(
+            db_data,
+            1,
+            test_prover(),
+            (0, &extsk1),
+            &to,
+            Amount(1),
+            None,
+        ) {
+            Ok(_) => panic!("Should have failed"),
+            Err(e) => assert_eq!(e.to_string(), "Incorrect ExtendedSpendingKey for account 0"),
+        }
+        match send_to_address(
+            db_data,
+            1,
+            test_prover(),
+            (1, &extsk0),
+            &to,
+            Amount(1),
+            None,
+        ) {
+            Ok(_) => panic!("Should have failed"),
+            Err(e) => assert_eq!(e.to_string(), "Incorrect ExtendedSpendingKey for account 1"),
+        }
+    }
+
+    #[test]
+    fn send_to_address_fails_with_no_blocks() {
+        let data_file = NamedTempFile::new().unwrap();
+        let db_data = data_file.path();
+        init_data_database(&db_data).unwrap();
+
+        // Add an account to the wallet
+        let extsk = ExtendedSpendingKey::master(&[]);
+        let extfvks = [ExtendedFullViewingKey::from(&extsk)];
+        init_accounts_table(&db_data, &extfvks).unwrap();
+        let to = extsk.default_address().unwrap().1;
+
+        // We cannot do anything if we aren't synchronised
+        match send_to_address(db_data, 1, test_prover(), (0, &extsk), &to, Amount(1), None) {
+            Ok(_) => panic!("Should have failed"),
+            Err(e) => assert_eq!(e.to_string(), "Must scan blocks first"),
+        }
+    }
+
+    #[test]
+    fn send_to_address_fails_on_insufficient_balance() {
+        let data_file = NamedTempFile::new().unwrap();
+        let db_data = data_file.path();
+        init_data_database(&db_data).unwrap();
+        init_blocks_table(&db_data, 1, 1, &[]).unwrap();
+
+        // Add an account to the wallet
+        let extsk = ExtendedSpendingKey::master(&[]);
+        let extfvks = [ExtendedFullViewingKey::from(&extsk)];
+        init_accounts_table(&db_data, &extfvks).unwrap();
+        let to = extsk.default_address().unwrap().1;
+
+        // Account balance should be zero
+        assert_eq!(get_balance(db_data, 0).unwrap(), Amount(0));
+
+        // We cannot spend anything
+        match send_to_address(db_data, 1, test_prover(), (0, &extsk), &to, Amount(1), None) {
+            Ok(_) => panic!("Should have failed"),
+            Err(e) => assert_eq!(
+                e.to_string(),
+                "Insufficient balance (have 0, need 10001 including fee)"
+            ),
+        }
+    }
+
+    #[test]
+    fn send_to_address_fails_on_unverified_notes() {
+        let cache_file = NamedTempFile::new().unwrap();
+        let db_cache = cache_file.path();
+        init_cache_database(&db_cache).unwrap();
+
+        let data_file = NamedTempFile::new().unwrap();
+        let db_data = data_file.path();
+        init_data_database(&db_data).unwrap();
+
+        // Add an account to the wallet
+        let extsk = ExtendedSpendingKey::master(&[]);
+        let extfvk = ExtendedFullViewingKey::from(&extsk);
+        init_accounts_table(&db_data, &[extfvk.clone()]).unwrap();
+
+        // Add funds to the wallet in a single note
+        let value = Amount(50000);
+        let (cb, _) = fake_compact_block(SAPLING_ACTIVATION_HEIGHT, extfvk.clone(), value);
+        insert_into_cache(db_cache, &cb);
+        scan_cached_blocks(db_cache, db_data).unwrap();
+
+        // Verified balance matches total balance
+        assert_eq!(get_balance(db_data, 0).unwrap(), value);
+        assert_eq!(get_verified_balance(db_data, 0).unwrap(), value);
+
+        // Add more funds to the wallet in a second note
+        let (cb, _) = fake_compact_block(SAPLING_ACTIVATION_HEIGHT + 1, extfvk.clone(), value);
+        insert_into_cache(db_cache, &cb);
+        scan_cached_blocks(db_cache, db_data).unwrap();
+
+        // Verified balance does not include the second note
+        assert_eq!(get_balance(db_data, 0).unwrap().0, 2 * value.0);
+        assert_eq!(get_verified_balance(db_data, 0).unwrap(), value);
+
+        // Spend fails because there are insufficient verified notes
+        let extsk2 = ExtendedSpendingKey::master(&[]);
+        let to = extsk2.default_address().unwrap().1;
+        match send_to_address(
+            db_data,
+            1,
+            test_prover(),
+            (0, &extsk),
+            &to,
+            Amount(70000),
+            None,
+        ) {
+            Ok(_) => panic!("Should have failed"),
+            Err(e) => assert_eq!(
+                e.to_string(),
+                "Insufficient balance (have 50000, need 80000 including fee)"
+            ),
+        }
+
+        // Mine blocks SAPLING_ACTIVATION_HEIGHT + 2 to 9 until just before the second
+        // note is verified
+        for i in 2..10 {
+            let (cb, _) = fake_compact_block(SAPLING_ACTIVATION_HEIGHT + i, extfvk.clone(), value);
+            insert_into_cache(db_cache, &cb);
+        }
+        scan_cached_blocks(db_cache, db_data).unwrap();
+
+        // Second spend still fails
+        match send_to_address(
+            db_data,
+            1,
+            test_prover(),
+            (0, &extsk),
+            &to,
+            Amount(70000),
+            None,
+        ) {
+            Ok(_) => panic!("Should have failed"),
+            Err(e) => assert_eq!(
+                e.to_string(),
+                "Insufficient balance (have 50000, need 80000 including fee)"
+            ),
+        }
+
+        // Mine block 11 so that the second note becomes verified
+        let (cb, _) = fake_compact_block(SAPLING_ACTIVATION_HEIGHT + 10, extfvk.clone(), value);
+        insert_into_cache(db_cache, &cb);
+        scan_cached_blocks(db_cache, db_data).unwrap();
+
+        // Second spend should now succeed
+        send_to_address(
+            db_data,
+            1,
+            test_prover(),
+            (0, &extsk),
+            &to,
+            Amount(70000),
+            None,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn send_to_address_fails_on_locked_notes() {
+        let cache_file = NamedTempFile::new().unwrap();
+        let db_cache = cache_file.path();
+        init_cache_database(&db_cache).unwrap();
+
+        let data_file = NamedTempFile::new().unwrap();
+        let db_data = data_file.path();
+        init_data_database(&db_data).unwrap();
+
+        // Add an account to the wallet
+        let extsk = ExtendedSpendingKey::master(&[]);
+        let extfvk = ExtendedFullViewingKey::from(&extsk);
+        init_accounts_table(&db_data, &[extfvk.clone()]).unwrap();
+
+        // Add funds to the wallet in a single note
+        let value = Amount(50000);
+        let (cb, _) = fake_compact_block(SAPLING_ACTIVATION_HEIGHT, extfvk.clone(), value);
+        insert_into_cache(db_cache, &cb);
+        scan_cached_blocks(db_cache, db_data).unwrap();
+        assert_eq!(get_balance(db_data, 0).unwrap(), value);
+
+        // Send some of the funds to another address
+        let extsk2 = ExtendedSpendingKey::master(&[]);
+        let to = extsk2.default_address().unwrap().1;
+        send_to_address(
+            db_data,
+            1,
+            test_prover(),
+            (0, &extsk),
+            &to,
+            Amount(15000),
+            None,
+        )
+        .unwrap();
+
+        // A second spend fails because there are no usable notes
+        match send_to_address(
+            db_data,
+            1,
+            test_prover(),
+            (0, &extsk),
+            &to,
+            Amount(2000),
+            None,
+        ) {
+            Ok(_) => panic!("Should have failed"),
+            Err(e) => assert_eq!(
+                e.to_string(),
+                "Insufficient balance (have 0, need 12000 including fee)"
+            ),
+        }
+
+        // Mine blocks SAPLING_ACTIVATION_HEIGHT + 1 to 21 (that don't send us funds)
+        // until just before the first transaction expires
+        for i in 1..22 {
+            let (cb, _) = fake_compact_block(
+                SAPLING_ACTIVATION_HEIGHT + i,
+                ExtendedFullViewingKey::from(&ExtendedSpendingKey::master(&[i as u8])),
+                value,
+            );
+            insert_into_cache(db_cache, &cb);
+        }
+        scan_cached_blocks(db_cache, db_data).unwrap();
+
+        // Second spend still fails
+        match send_to_address(
+            db_data,
+            1,
+            test_prover(),
+            (0, &extsk),
+            &to,
+            Amount(2000),
+            None,
+        ) {
+            Ok(_) => panic!("Should have failed"),
+            Err(e) => assert_eq!(
+                e.to_string(),
+                "Insufficient balance (have 0, need 12000 including fee)"
+            ),
+        }
+
+        // Mine block SAPLING_ACTIVATION_HEIGHT + 22 so that the first transaction expires
+        let (cb, _) = fake_compact_block(
+            SAPLING_ACTIVATION_HEIGHT + 22,
+            ExtendedFullViewingKey::from(&ExtendedSpendingKey::master(&[22])),
+            value,
+        );
+        insert_into_cache(db_cache, &cb);
+        scan_cached_blocks(db_cache, db_data).unwrap();
+
+        // Second spend should now succeed
+        send_to_address(
+            db_data,
+            1,
+            test_prover(),
+            (0, &extsk),
+            &to,
+            Amount(2000),
+            None,
+        )
+        .unwrap();
     }
 }

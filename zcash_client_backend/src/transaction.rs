@@ -21,7 +21,7 @@ use zip32::ExtendedSpendingKey;
 
 use crate::prover::TxProver;
 
-const DEFAULT_FEE: Amount = Amount(10000);
+pub const DEFAULT_FEE: Amount = Amount(10000);
 const DEFAULT_TX_EXPIRY_DELTA: u32 = 20;
 
 /// If there are any shielded inputs, always have at least two shielded outputs, padding
