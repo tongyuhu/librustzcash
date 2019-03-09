@@ -9,12 +9,14 @@ edition = "2018"
 [dependencies]
 bech32 = "0.7"
 ff = { path = "../ff" }
+pairing = { path = "../pairing" }
 protobuf = "2"
 rusqlite = { version = "0.20", features = ["bundled"] }
+time = "0.1"
 zcash_client_backend = { path = "../zcash_client_backend" }
 zcash_primitives = { path = "../zcash_primitives" }
 
 [dev-dependencies]
-pairing = { path = "../pairing" }
 rand_core = "0.5.1"
 tempfile = "3"
+zcash_proofs = { path = "../zcash_proofs" }

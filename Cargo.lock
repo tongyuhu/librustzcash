@@ -795,8 +795,10 @@ dependencies = [
  "rand_core 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rusqlite 0.20.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "tempfile 3.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.1.42 (registry+https://github.com/rust-lang/crates.io-index)",
  "zcash_client_backend 0.1.0",
  "zcash_primitives 0.1.0",
+ "zcash_proofs 0.1.0",
 ]
 
 [[package]]
