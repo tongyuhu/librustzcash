@@ -362,6 +362,58 @@ pub fn get_verified_balance<P: AsRef<Path>>(db_data: P, account: u32) -> Result<
     Ok(Amount(balance))
 }
 
+/// Returns the memo for a received note, if it is known and a valid UTF-8 string.
+///
+/// The note is identified by its row index in the data database.
+pub fn get_received_memo_as_utf8<P: AsRef<Path>>(
+    db_data: P,
+    id_note: i64,
+) -> Result<Option<String>, Error> {
+    let data = Connection::open(db_data)?;
+
+    let memo: Vec<_> = data.query_row(
+        "SELECT memo FROM received_notes
+        WHERE id_note = ?",
+        &[id_note],
+        |row| row.get(0),
+    )?;
+
+    match Memo::from_bytes(&memo) {
+        Some(memo) => match memo.to_utf8() {
+            Some(Ok(res)) => Ok(Some(res)),
+            Some(Err(e)) => Err(Error(ErrorKind::InvalidMemo(e))),
+            None => Ok(None),
+        },
+        None => Ok(None),
+    }
+}
+
+/// Returns the memo for a sent note, if it is known and a valid UTF-8 string.
+///
+/// The note is identified by its row index in the data database.
+pub fn get_sent_memo_as_utf8<P: AsRef<Path>>(
+    db_data: P,
+    id_note: i64,
+) -> Result<Option<String>, Error> {
+    let data = Connection::open(db_data)?;
+
+    let memo: Vec<_> = data.query_row(
+        "SELECT memo FROM sent_notes
+        WHERE id_note = ?",
+        &[id_note],
+        |row| row.get(0),
+    )?;
+
+    match Memo::from_bytes(&memo) {
+        Some(memo) => match memo.to_utf8() {
+            Some(Ok(res)) => Ok(Some(res)),
+            Some(Err(e)) => Err(Error(ErrorKind::InvalidMemo(e))),
+            None => Ok(None),
+        },
+        None => Ok(None),
+    }
+}
+
 struct CompactBlockRow {
     height: i32,
     data: Vec<u8>,
