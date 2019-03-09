@@ -1,0 +1,15 @@
+[package]
+name = "zcash_client_sqlite"
+version = "0.0.0"
+authors = [
+    "Jack Grigg <jack@z.cash>",
+]
+edition = "2018"
+
+[dependencies]
+rusqlite = { version = "0.20", features = ["bundled"] }
+zcash_client_backend = { path = "../zcash_client_backend" }
+zcash_primitives = { path = "../zcash_primitives" }
+
+[dev-dependencies]
+tempfile = "3"
