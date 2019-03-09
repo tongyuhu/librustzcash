@@ -1,7 +1,9 @@
 use rusqlite::{types::ToSql, Connection, NO_PARAMS};
+use std::cmp;
 use std::error;
 use std::fmt;
 use std::path::Path;
+use zcash_primitives::transaction::components::Amount;
 use zip32::ExtendedFullViewingKey;
 
 use crate::{
@@ -9,8 +11,11 @@ use crate::{
     encoding::{encode_extended_full_viewing_key, encode_payment_address},
 };
 
+const ANCHOR_OFFSET: u32 = 10;
+
 #[derive(Debug)]
 pub enum ErrorKind {
+    ScanRequired,
     TableNotEmpty,
     Database(rusqlite::Error),
 }
@@ -21,6 +26,7 @@ pub struct Error(ErrorKind);
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.0 {
+            ErrorKind::ScanRequired => write!(f, "Must scan blocks first"),
             ErrorKind::TableNotEmpty => write!(f, "Table is not empty"),
             ErrorKind::Database(e) => write!(f, "{}", e),
         }
@@ -44,6 +50,33 @@ impl Error {
 fn address_from_extfvk(extfvk: &ExtendedFullViewingKey) -> String {
     let addr = extfvk.default_address().unwrap().1;
     encode_payment_address(HRP_SAPLING_PAYMENT_ADDRESS_TEST, &addr)
+}
+
+/// Determines the target height for a transaction, and the height from which to
+/// select anchors, based on the current synchronised block chain.
+fn get_target_and_anchor_heights(data: &Connection) -> Result<(u32, u32), Error> {
+    data.query_row_and_then(
+        "SELECT MIN(height), MAX(height) FROM blocks",
+        NO_PARAMS,
+        |row| match (row.get_checked::<_, u32>(0), row.get_checked::<_, u32>(1)) {
+            // If there are no blocks, the query returns NULL.
+            (Err(rusqlite::Error::InvalidColumnType(_, _)), _)
+            | (_, Err(rusqlite::Error::InvalidColumnType(_, _))) => {
+                Err(Error(ErrorKind::ScanRequired))
+            }
+            (Err(e), _) | (_, Err(e)) => Err(e.into()),
+            (Ok(min_height), Ok(max_height)) => {
+                let target_height = max_height + 1;
+
+                // Select an anchor ANCHOR_OFFSET back from the target block,
+                // unless that would be before the earliest block we have.
+                let anchor_height =
+                    cmp::max(target_height.saturating_sub(ANCHOR_OFFSET), min_height);
+
+                Ok((target_height, anchor_height))
+            }
+        },
+    )
 }
 
 /// Sets up the internal structure of the cache database.
@@ -212,12 +245,48 @@ pub fn get_address<P: AsRef<Path>>(db_data: P, account: u32) -> Result<String, E
     Ok(addr)
 }
 
+/// Returns the balance for the account, including all unspent notes that we know about.
+pub fn get_balance<P: AsRef<Path>>(db_data: P, account: u32) -> Result<Amount, Error> {
+    let data = Connection::open(db_data)?;
+
+    let balance = data.query_row(
+        "SELECT SUM(value) FROM received_notes
+        WHERE account = ? AND spent IS NULL",
+        &[account],
+        |row| row.get_checked(0).unwrap_or(0),
+    )?;
+
+    Ok(Amount(balance))
+}
+
+/// Returns the verified balance for the account, which ignores notes that have been
+/// received too recently and are not yet deemed spendable.
+pub fn get_verified_balance<P: AsRef<Path>>(db_data: P, account: u32) -> Result<Amount, Error> {
+    let data = Connection::open(db_data)?;
+
+    let (_, anchor_height) = get_target_and_anchor_heights(&data)?;
+
+    let balance = data.query_row(
+        "SELECT SUM(value) FROM received_notes
+        INNER JOIN transactions ON transactions.id_tx = received_notes.tx
+        WHERE account = ? AND spent IS NULL AND transactions.block <= ?",
+        &[account, anchor_height],
+        |row| row.get_checked(0).unwrap_or(0),
+    )?;
+
+    Ok(Amount(balance))
+}
+
 #[cfg(test)]
 mod tests {
     use tempfile::NamedTempFile;
+    use zcash_primitives::transaction::components::Amount;
     use zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
 
-    use super::{get_address, init_accounts_table, init_blocks_table, init_data_database};
+    use super::{
+        get_address, get_balance, get_verified_balance, init_accounts_table, init_blocks_table,
+        init_data_database, ErrorKind,
+    };
     use crate::{constants::HRP_SAPLING_PAYMENT_ADDRESS_TEST, encoding::decode_payment_address};
 
     #[test]
@@ -269,5 +338,31 @@ mod tests {
         let addr = get_address(&db_data, 0).unwrap();
         let pa = decode_payment_address(HRP_SAPLING_PAYMENT_ADDRESS_TEST, &addr).unwrap();
         assert_eq!(pa.unwrap(), extsk.default_address().unwrap().1);
+    }
+
+    #[test]
+    fn empty_database_has_no_balance() {
+        let data_file = NamedTempFile::new().unwrap();
+        let db_data = data_file.path();
+        init_data_database(&db_data).unwrap();
+
+        // Add an account to the wallet
+        let extsk = ExtendedSpendingKey::master(&[]);
+        let extfvks = [ExtendedFullViewingKey::from(&extsk)];
+        init_accounts_table(&db_data, &extfvks).unwrap();
+
+        // The account should be empty
+        assert_eq!(get_balance(db_data, 0).unwrap(), Amount(0));
+
+        // The account should have no verified balance, as we haven't scanned any blocks
+        let e = get_verified_balance(db_data, 0).unwrap_err();
+        match e.kind() {
+            ErrorKind::ScanRequired => (),
+            _ => panic!("Unexpected error: {:?}", e),
+        }
+
+        // An invalid account has zero balance
+        assert!(get_address(db_data, 1).is_err());
+        assert_eq!(get_balance(db_data, 1).unwrap(), Amount(0));
     }
 }
