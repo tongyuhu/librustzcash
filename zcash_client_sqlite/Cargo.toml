@@ -7,9 +7,15 @@ authors = [
 edition = "2018"
 
 [dependencies]
+bech32 = "0.6"
+ff = { path = "../ff" }
+protobuf = "2"
 rusqlite = { version = "0.15", features = ["bundled"] }
 zcash_client_backend = { path = "../zcash_client_backend" }
 zcash_primitives = { path = "../zcash_primitives" }
 
 [dev-dependencies]
+pairing = { path = "../pairing" }
+rand = "0.4"
+sapling-crypto = { path = "../sapling-crypto" }
 tempfile = "3"
