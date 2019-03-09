@@ -7,3 +7,6 @@ pub mod prover;
 pub mod transaction;
 pub mod wallet;
 pub mod welding_rig;
+
+#[cfg(feature = "sqlite")]
+pub mod sqlite;
