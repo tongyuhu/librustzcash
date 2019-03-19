@@ -415,7 +415,7 @@ impl IncrementalWitness {
     }
 }
 
-/// A witness to a path from a postion in a particular Sapling commitment tree
+/// A witness to a path from a position in a particular Sapling commitment tree
 /// to the root of that tree.
 #[derive(Debug, PartialEq)]
 pub struct CommitmentTreeWitness {
