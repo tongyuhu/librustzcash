@@ -16,6 +16,11 @@
 //!   **MUST NOT** write to the database without using these APIs. Callers **MAY** read
 //!   the database directly in order to extract information for display to users.
 //!
+//! # Features
+//!
+//! The `mainnet` feature configures the light client for use with the Zcash mainnet. By
+//! default, the light client is configured for use with the Zcash testnet.
+//!
 //! [`CompactBlock`]: zcash_client_backend::proto::compact_formats::CompactBlock
 
 use ff::{PrimeField, PrimeFieldRepr};
@@ -31,7 +36,6 @@ use std::error;
 use std::fmt;
 use std::path::Path;
 use zcash_client_backend::{
-    constants::testnet::{HRP_SAPLING_EXTENDED_FULL_VIEWING_KEY, HRP_SAPLING_PAYMENT_ADDRESS},
     encoding::{
         decode_extended_full_viewing_key, encode_extended_full_viewing_key, encode_payment_address,
     },
@@ -52,7 +56,22 @@ use zcash_primitives::{
     JUBJUB,
 };
 
+#[cfg(feature = "mainnet")]
+use zcash_client_backend::constants::mainnet::{
+    HRP_SAPLING_EXTENDED_FULL_VIEWING_KEY, HRP_SAPLING_PAYMENT_ADDRESS,
+};
+
+#[cfg(not(feature = "mainnet"))]
+use zcash_client_backend::constants::testnet::{
+    HRP_SAPLING_EXTENDED_FULL_VIEWING_KEY, HRP_SAPLING_PAYMENT_ADDRESS,
+};
+
 const ANCHOR_OFFSET: u32 = 10;
+
+#[cfg(feature = "mainnet")]
+const SAPLING_ACTIVATION_HEIGHT: i32 = 419_200;
+
+#[cfg(not(feature = "mainnet"))]
 const SAPLING_ACTIVATION_HEIGHT: i32 = 280_000;
 
 #[derive(Debug)]
@@ -1118,7 +1137,6 @@ mod tests {
     use std::path::Path;
     use tempfile::NamedTempFile;
     use zcash_client_backend::{
-        constants::testnet::HRP_SAPLING_PAYMENT_ADDRESS,
         encoding::decode_payment_address,
         proto::compact_formats::{CompactBlock, CompactOutput, CompactSpend, CompactTx},
     };
@@ -1136,6 +1154,12 @@ mod tests {
         init_cache_database, init_data_database, scan_cached_blocks, send_to_address, ErrorKind,
         SAPLING_ACTIVATION_HEIGHT,
     };
+
+    #[cfg(feature = "mainnet")]
+    use zcash_client_backend::constants::mainnet::HRP_SAPLING_PAYMENT_ADDRESS;
+
+    #[cfg(not(feature = "mainnet"))]
+    use zcash_client_backend::constants::testnet::HRP_SAPLING_PAYMENT_ADDRESS;
 
     fn test_prover() -> impl TxProver {
         match LocalTxProver::with_default_location() {
