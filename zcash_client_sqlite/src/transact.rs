@@ -4,10 +4,7 @@ use ff::{PrimeField, PrimeFieldRepr};
 use pairing::bls12_381::Bls12;
 use rusqlite::{types::ToSql, Connection, NO_PARAMS};
 use std::path::Path;
-use zcash_client_backend::{
-    constants::testnet::{HRP_SAPLING_EXTENDED_FULL_VIEWING_KEY, HRP_SAPLING_PAYMENT_ADDRESS},
-    encoding::{encode_extended_full_viewing_key, encode_payment_address},
-};
+use zcash_client_backend::encoding::{encode_extended_full_viewing_key, encode_payment_address};
 use zcash_primitives::{
     consensus,
     jubjub::fs::{Fs, FsRepr},
@@ -26,7 +23,8 @@ use zcash_primitives::{
 
 use crate::{
     error::{Error, ErrorKind},
-    get_target_and_anchor_heights,
+    get_target_and_anchor_heights, HRP_SAPLING_EXTENDED_FULL_VIEWING_KEY,
+    HRP_SAPLING_PAYMENT_ADDRESS,
 };
 
 struct SelectedNoteRow {

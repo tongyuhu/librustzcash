@@ -20,3 +20,6 @@ zcash_primitives = { path = "../zcash_primitives" }
 rand_core = "0.5.1"
 tempfile = "3"
 zcash_proofs = { path = "../zcash_proofs" }
+
+[features]
+mainnet = []
