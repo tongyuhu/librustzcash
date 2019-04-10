@@ -8,7 +8,6 @@ extern crate rand;
 extern crate sapling_crypto;
 extern crate zcash_primitives;
 extern crate zcash_proofs;
-extern crate zip32;
 
 extern crate lazy_static;
 
@@ -61,6 +60,7 @@ use zcash_primitives::{
     merkle_tree::CommitmentTreeWitness,
     note_encryption::sapling_ka_agree,
     sapling::{merkle_hash, spend_sig},
+    zip32,
     JUBJUB,
 };
 use zcash_proofs::{
