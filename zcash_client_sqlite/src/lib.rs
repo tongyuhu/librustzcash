@@ -43,6 +43,7 @@ use zcash_client_backend::{
     welding_rig::scan_block,
 };
 use zcash_primitives::{
+    block::BlockHash,
     merkle_tree::{CommitmentTree, IncrementalWitness},
     note_encryption::Memo,
     prover::TxProver,
@@ -255,6 +256,7 @@ pub fn init_data_database<P: AsRef<Path>>(db_data: P) -> Result<(), Error> {
     data.execute(
         "CREATE TABLE IF NOT EXISTS blocks (
             height INTEGER PRIMARY KEY,
+            hash BLOB NOT NULL,
             time INTEGER NOT NULL,
             sapling_tree BLOB NOT NULL
         )",
@@ -386,20 +388,24 @@ pub fn init_accounts_table<P: AsRef<Path>>(
 ///
 /// ```
 /// use zcash_client_sqlite::init_blocks_table;
+/// use zcash_primitives::block::BlockHash;
 ///
 /// // The block height.
 /// let height = 500_000;
+/// // The hash of the block header.
+/// let hash = BlockHash([0; 32]);
 /// // The nTime field from the block header.
 /// let time = 12_3456_7890;
 /// // The serialized Sapling commitment tree as of this block.
 /// // Pre-compute and hard-code, or obtain from a service.
 /// let sapling_tree = &[];
 ///
-/// init_blocks_table("/path/to/data.db", height, time, sapling_tree);
+/// init_blocks_table("/path/to/data.db", height, hash, time, sapling_tree);
 /// ```
 pub fn init_blocks_table<P: AsRef<Path>>(
     db_data: P,
     height: i32,
+    hash: BlockHash,
     time: u32,
     sapling_tree: &[u8],
 ) -> Result<(), Error> {
@@ -411,9 +417,14 @@ pub fn init_blocks_table<P: AsRef<Path>>(
     }
 
     data.execute(
-        "INSERT INTO blocks (height, time, sapling_tree)
-        VALUES (?, ?, ?)",
-        &[height.to_sql()?, time.to_sql()?, sapling_tree.to_sql()?],
+        "INSERT INTO blocks (height, hash, time, sapling_tree)
+        VALUES (?, ?, ?, ?)",
+        &[
+            height.to_sql()?,
+            hash.0.to_sql()?,
+            time.to_sql()?,
+            sapling_tree.to_sql()?,
+        ],
     )?;
 
     Ok(())
@@ -666,8 +677,8 @@ pub fn scan_cached_blocks<P: AsRef<Path>, Q: AsRef<Path>>(
 
     // Prepare per-block SQL statements
     let mut stmt_insert_block = data.prepare(
-        "INSERT INTO blocks (height, time, sapling_tree)
-        VALUES (?, ?, ?)",
+        "INSERT INTO blocks (height, hash, time, sapling_tree)
+        VALUES (?, ?, ?, ?)",
     )?;
     let mut stmt_update_tx = data.prepare(
         "UPDATE transactions
@@ -709,6 +720,7 @@ pub fn scan_cached_blocks<P: AsRef<Path>, Q: AsRef<Path>>(
         last_height = row.height;
 
         let block: CompactBlock = parse_from_bytes(&row.data)?;
+        let block_hash = block.hash.clone();
         let block_time = block.time;
 
         let txs = {
@@ -755,6 +767,7 @@ pub fn scan_cached_blocks<P: AsRef<Path>, Q: AsRef<Path>>(
             .expect("Should be able to write to a Vec");
         stmt_insert_block.execute(&[
             row.height.to_sql()?,
+            block_hash.to_sql()?,
             block_time.to_sql()?,
             encoded_tree.to_sql()?,
         ])?;
@@ -1141,6 +1154,7 @@ mod tests {
         proto::compact_formats::{CompactBlock, CompactOutput, CompactSpend, CompactTx},
     };
     use zcash_primitives::{
+        block::BlockHash,
         note_encryption::{Memo, SaplingNoteEncryption},
         prover::TxProver,
         transaction::components::Amount,
@@ -1207,6 +1221,8 @@ mod tests {
         ctx.outputs.push(cout);
         let mut cb = CompactBlock::new();
         cb.set_height(height as u64);
+        cb.hash.resize(32, 0);
+        rng.fill_bytes(&mut cb.hash);
         cb.vtx.push(ctx);
         (cb, note.nf(&extfvk.fvk.vk, 0, &JUBJUB))
     }
@@ -1284,6 +1300,8 @@ mod tests {
 
         let mut cb = CompactBlock::new();
         cb.set_height(height as u64);
+        cb.hash.resize(32, 0);
+        rng.fill_bytes(&mut cb.hash);
         cb.vtx.push(ctx);
         cb
     }
@@ -1330,10 +1348,10 @@ mod tests {
         init_data_database(&db_data).unwrap();
 
         // First call with data should initialise the blocks table
-        init_blocks_table(&db_data, 1, 1, &[]).unwrap();
+        init_blocks_table(&db_data, 1, BlockHash([1; 32]), 1, &[]).unwrap();
 
         // Subsequent calls should return an error
-        init_blocks_table(&db_data, 2, 2, &[]).unwrap_err();
+        init_blocks_table(&db_data, 2, BlockHash([2; 32]), 2, &[]).unwrap_err();
     }
 
     #[test]
@@ -1584,7 +1602,7 @@ mod tests {
         let data_file = NamedTempFile::new().unwrap();
         let db_data = data_file.path();
         init_data_database(&db_data).unwrap();
-        init_blocks_table(&db_data, 1, 1, &[]).unwrap();
+        init_blocks_table(&db_data, 1, BlockHash([1; 32]), 1, &[]).unwrap();
 
         // Add an account to the wallet
         let extsk = ExtendedSpendingKey::master(&[]);
