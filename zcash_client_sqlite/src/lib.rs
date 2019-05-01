@@ -1188,6 +1188,7 @@ mod tests {
     /// the given address. Returns the CompactBlock and the nullifier for the new note.
     fn fake_compact_block(
         height: i32,
+        prev_hash: BlockHash,
         extfvk: ExtendedFullViewingKey,
         value: Amount,
     ) -> (CompactBlock, Vec<u8>) {
@@ -1223,6 +1224,7 @@ mod tests {
         cb.set_height(height as u64);
         cb.hash.resize(32, 0);
         rng.fill_bytes(&mut cb.hash);
+        cb.prevHash.extend_from_slice(&prev_hash.0);
         cb.vtx.push(ctx);
         (cb, note.nf(&extfvk.fvk.vk, 0, &JUBJUB))
     }
@@ -1231,6 +1233,7 @@ mod tests {
     /// given address.
     fn fake_compact_block_spending(
         height: i32,
+        prev_hash: BlockHash,
         (nf, in_value): (Vec<u8>, Amount),
         extfvk: ExtendedFullViewingKey,
         to: PaymentAddress<Bls12>,
@@ -1302,6 +1305,7 @@ mod tests {
         cb.set_height(height as u64);
         cb.hash.resize(32, 0);
         rng.fill_bytes(&mut cb.hash);
+        cb.prevHash.extend_from_slice(&prev_hash.0);
         cb.vtx.push(ctx);
         cb
     }
@@ -1414,13 +1418,29 @@ mod tests {
 
         // Create a block with height SAPLING_ACTIVATION_HEIGHT
         let value = Amount(50000);
-        let (cb1, _) = fake_compact_block(SAPLING_ACTIVATION_HEIGHT, extfvk.clone(), value);
+        let (cb1, _) = fake_compact_block(
+            SAPLING_ACTIVATION_HEIGHT,
+            BlockHash([0; 32]),
+            extfvk.clone(),
+            value,
+        );
         insert_into_cache(db_cache, &cb1);
         scan_cached_blocks(db_cache, db_data).unwrap();
         assert_eq!(get_balance(db_data, 0).unwrap(), value);
 
         // We cannot scan a block of height SAPLING_ACTIVATION_HEIGHT + 2 next
-        let (cb3, _) = fake_compact_block(SAPLING_ACTIVATION_HEIGHT + 2, extfvk.clone(), value);
+        let (cb2, _) = fake_compact_block(
+            SAPLING_ACTIVATION_HEIGHT + 1,
+            cb1.hash(),
+            extfvk.clone(),
+            value,
+        );
+        let (cb3, _) = fake_compact_block(
+            SAPLING_ACTIVATION_HEIGHT + 2,
+            cb2.hash(),
+            extfvk.clone(),
+            value,
+        );
         insert_into_cache(db_cache, &cb3);
         match scan_cached_blocks(db_cache, db_data) {
             Ok(_) => panic!("Should have failed"),
@@ -1435,7 +1455,6 @@ mod tests {
         }
 
         // If we add a block of height SAPLING_ACTIVATION_HEIGHT + 1, we can now scan both
-        let (cb2, _) = fake_compact_block(SAPLING_ACTIVATION_HEIGHT + 1, extfvk.clone(), value);
         insert_into_cache(db_cache, &cb2);
         scan_cached_blocks(db_cache, db_data).unwrap();
         assert_eq!(get_balance(db_data, 0).unwrap(), Amount(150_000));
@@ -1461,7 +1480,12 @@ mod tests {
 
         // Create a fake CompactBlock sending value to the address
         let value = Amount(5);
-        let (cb, _) = fake_compact_block(SAPLING_ACTIVATION_HEIGHT, extfvk.clone(), value);
+        let (cb, _) = fake_compact_block(
+            SAPLING_ACTIVATION_HEIGHT,
+            BlockHash([0; 32]),
+            extfvk.clone(),
+            value,
+        );
         insert_into_cache(db_cache, &cb);
 
         // Scan the cache
@@ -1472,7 +1496,7 @@ mod tests {
 
         // Create a second fake CompactBlock sending more value to the address
         let value2 = Amount(7);
-        let (cb2, _) = fake_compact_block(SAPLING_ACTIVATION_HEIGHT + 1, extfvk, value2);
+        let (cb2, _) = fake_compact_block(SAPLING_ACTIVATION_HEIGHT + 1, cb.hash(), extfvk, value2);
         insert_into_cache(db_cache, &cb2);
 
         // Scan the cache again
@@ -1503,7 +1527,12 @@ mod tests {
 
         // Create a fake CompactBlock sending value to the address
         let value = Amount(5);
-        let (cb, nf) = fake_compact_block(SAPLING_ACTIVATION_HEIGHT, extfvk.clone(), value);
+        let (cb, nf) = fake_compact_block(
+            SAPLING_ACTIVATION_HEIGHT,
+            BlockHash([0; 32]),
+            extfvk.clone(),
+            value,
+        );
         insert_into_cache(db_cache, &cb);
 
         // Scan the cache
@@ -1520,6 +1549,7 @@ mod tests {
             db_cache,
             &fake_compact_block_spending(
                 SAPLING_ACTIVATION_HEIGHT + 1,
+                cb.hash(),
                 (nf, value),
                 extfvk,
                 to2,
@@ -1640,7 +1670,12 @@ mod tests {
 
         // Add funds to the wallet in a single note
         let value = Amount(50000);
-        let (cb, _) = fake_compact_block(SAPLING_ACTIVATION_HEIGHT, extfvk.clone(), value);
+        let (cb, _) = fake_compact_block(
+            SAPLING_ACTIVATION_HEIGHT,
+            BlockHash([0; 32]),
+            extfvk.clone(),
+            value,
+        );
         insert_into_cache(db_cache, &cb);
         scan_cached_blocks(db_cache, db_data).unwrap();
 
@@ -1649,7 +1684,12 @@ mod tests {
         assert_eq!(get_verified_balance(db_data, 0).unwrap(), value);
 
         // Add more funds to the wallet in a second note
-        let (cb, _) = fake_compact_block(SAPLING_ACTIVATION_HEIGHT + 1, extfvk.clone(), value);
+        let (cb, _) = fake_compact_block(
+            SAPLING_ACTIVATION_HEIGHT + 1,
+            cb.hash(),
+            extfvk.clone(),
+            value,
+        );
         insert_into_cache(db_cache, &cb);
         scan_cached_blocks(db_cache, db_data).unwrap();
 
@@ -1679,7 +1719,12 @@ mod tests {
         // Mine blocks SAPLING_ACTIVATION_HEIGHT + 2 to 9 until just before the second
         // note is verified
         for i in 2..10 {
-            let (cb, _) = fake_compact_block(SAPLING_ACTIVATION_HEIGHT + i, extfvk.clone(), value);
+            let (cb, _) = fake_compact_block(
+                SAPLING_ACTIVATION_HEIGHT + i,
+                cb.hash(),
+                extfvk.clone(),
+                value,
+            );
             insert_into_cache(db_cache, &cb);
         }
         scan_cached_blocks(db_cache, db_data).unwrap();
@@ -1702,7 +1747,12 @@ mod tests {
         }
 
         // Mine block 11 so that the second note becomes verified
-        let (cb, _) = fake_compact_block(SAPLING_ACTIVATION_HEIGHT + 10, extfvk.clone(), value);
+        let (cb, _) = fake_compact_block(
+            SAPLING_ACTIVATION_HEIGHT + 10,
+            cb.hash(),
+            extfvk.clone(),
+            value,
+        );
         insert_into_cache(db_cache, &cb);
         scan_cached_blocks(db_cache, db_data).unwrap();
 
@@ -1736,7 +1786,12 @@ mod tests {
 
         // Add funds to the wallet in a single note
         let value = Amount(50000);
-        let (cb, _) = fake_compact_block(SAPLING_ACTIVATION_HEIGHT, extfvk.clone(), value);
+        let (cb, _) = fake_compact_block(
+            SAPLING_ACTIVATION_HEIGHT,
+            BlockHash([0; 32]),
+            extfvk.clone(),
+            value,
+        );
         insert_into_cache(db_cache, &cb);
         scan_cached_blocks(db_cache, db_data).unwrap();
         assert_eq!(get_balance(db_data, 0).unwrap(), value);
@@ -1777,6 +1832,7 @@ mod tests {
         for i in 1..22 {
             let (cb, _) = fake_compact_block(
                 SAPLING_ACTIVATION_HEIGHT + i,
+                cb.hash(),
                 ExtendedFullViewingKey::from(&ExtendedSpendingKey::master(&[i as u8])),
                 value,
             );
@@ -1804,6 +1860,7 @@ mod tests {
         // Mine block SAPLING_ACTIVATION_HEIGHT + 22 so that the first transaction expires
         let (cb, _) = fake_compact_block(
             SAPLING_ACTIVATION_HEIGHT + 22,
+            cb.hash(),
             ExtendedFullViewingKey::from(&ExtendedSpendingKey::master(&[22])),
             value,
         );
