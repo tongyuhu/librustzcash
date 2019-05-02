@@ -67,6 +67,8 @@ use zcash_client_backend::constants::testnet::{
     HRP_SAPLING_EXTENDED_FULL_VIEWING_KEY, HRP_SAPLING_PAYMENT_ADDRESS,
 };
 
+pub mod chain;
+
 const ANCHOR_OFFSET: u32 = 10;
 
 #[cfg(feature = "mainnet")]
@@ -79,6 +81,7 @@ const SAPLING_ACTIVATION_HEIGHT: i32 = 280_000;
 pub enum ErrorKind {
     IncorrectHRPExtFVK,
     InsufficientBalance(u64, u64),
+    InvalidChain(i32, chain::ChainInvalidCause),
     InvalidExtSK(u32),
     InvalidHeight(i32, i32),
     InvalidMemo(std::str::Utf8Error),
@@ -106,6 +109,9 @@ impl fmt::Display for Error {
                 "Insufficient balance (have {}, need {} including fee)",
                 have, need
             ),
+            ErrorKind::InvalidChain(upper_bound, cause) => {
+                write!(f, "Invalid chain (upper bound: {}): {:?}", upper_bound, cause)
+            }
             ErrorKind::InvalidExtSK(account) => {
                 write!(f, "Incorrect ExtendedSpendingKey for account {}", account)
             }
