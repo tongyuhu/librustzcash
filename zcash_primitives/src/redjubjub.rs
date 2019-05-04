@@ -2,7 +2,7 @@
 //! See section 5.4.6 of the Sapling protocol specification.
 
 use ff::{Field, PrimeField, PrimeFieldRepr};
-use rand::{Rng, Rand};
+use rand::{Rand, Rng};
 use sapling_crypto::jubjub::{
     edwards::Point, FixedGenerators, JubjubEngine, JubjubParams, Unknown,
 };
@@ -150,10 +150,15 @@ impl<E: JubjubEngine> PublicKey<E> {
             Err(_) => return false,
         };
         // 0 = h_G(-S . P_G + R + c . vk)
-        self.0.mul(c, params).add(&r, params).add(
-            &params.generator(p_g).mul(s, params).negate().into(),
-            params
-        ).mul_by_cofactor(params).eq(&Point::zero())
+        self.0
+            .mul(c, params)
+            .add(&r, params)
+            .add(
+                &params.generator(p_g).mul(s, params).negate().into(),
+                params,
+            )
+            .mul_by_cofactor(params)
+            .eq(&Point::zero())
     }
 }
 
@@ -170,8 +175,7 @@ pub fn batch_verify<'a, E: JubjubEngine, R: Rng>(
     batch: &[BatchEntry<'a, E>],
     p_g: FixedGenerators,
     params: &E::Params,
-) -> bool
-{
+) -> bool {
     let mut acc = Point::<E, Unknown>::zero();
 
     for entry in batch {
@@ -232,8 +236,16 @@ mod tests {
         assert!(vk2.verify(msg2, &sig2, p_g, params));
 
         let mut batch = vec![
-            BatchEntry { vk: vk1, msg: msg1, sig: sig1 },
-            BatchEntry { vk: vk2, msg: msg2, sig: sig2 }
+            BatchEntry {
+                vk: vk1,
+                msg: msg1,
+                sig: sig1,
+            },
+            BatchEntry {
+                vk: vk2,
+                msg: msg2,
+                sig: sig2,
+            },
         ];
 
         assert!(batch_verify(rng, &batch, p_g, params));
