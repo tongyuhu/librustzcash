@@ -21,9 +21,11 @@ pub mod legacy;
 pub mod merkle_tree;
 pub mod note_encryption;
 pub mod prover;
+pub mod redjubjub;
 pub mod sapling;
 mod serialize;
 pub mod transaction;
+mod util;
 pub mod zip32;
 
 #[cfg(test)]

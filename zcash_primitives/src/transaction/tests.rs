@@ -1,9 +1,10 @@
 use pairing::bls12_381::Bls12;
 use rand::{thread_rng, Rng};
-use sapling_crypto::{jubjub::FixedGenerators, redjubjub::PrivateKey};
+use sapling_crypto::jubjub::FixedGenerators;
 
 use super::{components::Amount, sighash::signature_hash, Transaction, TransactionData};
 use legacy::Script;
+use redjubjub::PrivateKey;
 use JUBJUB;
 
 #[test]
