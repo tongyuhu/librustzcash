@@ -1,4 +1,5 @@
 use ff::{BitIterator, Field, PrimeField, PrimeFieldRepr, SqrtField};
+use std::ops::{AddAssign, MulAssign, SubAssign};
 
 use super::{
     JubjubEngine,

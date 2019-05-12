@@ -1,5 +1,6 @@
 use ff::Field;
 use pairing::Engine;
+use std::ops::AddAssign;
 
 use super::*;
 use super::num::{

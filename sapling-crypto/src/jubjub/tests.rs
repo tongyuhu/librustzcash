@@ -13,6 +13,7 @@ use ff::{
     SqrtField,
     LegendreSymbol
 };
+use std::ops::{AddAssign, MulAssign, SubAssign};
 
 use rand::{XorShiftRng, SeedableRng, Rand};
 

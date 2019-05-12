@@ -631,6 +631,7 @@ pub mod g1 {
     use group::{CurveAffine, CurveProjective, EncodedPoint, GroupDecodingError};
     use rand::{Rand, Rng};
     use std::fmt;
+    use std::ops::{AddAssign, MulAssign, SubAssign};
     use {Engine, PairingCurveAffine};
 
     curve_impl!(
@@ -1278,6 +1279,7 @@ pub mod g2 {
     use group::{CurveAffine, CurveProjective, EncodedPoint, GroupDecodingError};
     use rand::{Rand, Rng};
     use std::fmt;
+    use std::ops::{AddAssign, MulAssign, SubAssign};
     use {Engine, PairingCurveAffine};
 
     curve_impl!(

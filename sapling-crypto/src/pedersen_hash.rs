@@ -1,5 +1,6 @@
 use ff::{Field, PrimeField, PrimeFieldRepr};
 use jubjub::*;
+use std::ops::AddAssign;
 
 #[derive(Copy, Clone)]
 pub enum Personalization {

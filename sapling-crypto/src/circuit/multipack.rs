@@ -1,6 +1,8 @@
 use ff::{Field, PrimeField};
 use pairing::Engine;
 use bellman::{ConstraintSystem, SynthesisError};
+use std::ops::AddAssign;
+
 use super::boolean::{Boolean};
 use super::num::Num;
 use super::Assignment;

@@ -23,7 +23,7 @@ pub mod groth16;
 
 use ff::{Field, ScalarEngine};
 
-use std::ops::{Add, Sub};
+use std::ops::{Add, MulAssign, Sub};
 use std::fmt;
 use std::error::Error;
 use std::io;

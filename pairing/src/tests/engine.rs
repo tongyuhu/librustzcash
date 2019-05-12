@@ -1,5 +1,6 @@
 use group::{CurveAffine, CurveProjective};
 use rand::{Rand, SeedableRng, XorShiftRng};
+use std::ops::MulAssign;
 
 use {Engine, Field, PairingCurveAffine, PrimeField};
 

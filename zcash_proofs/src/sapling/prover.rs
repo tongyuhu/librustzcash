@@ -12,6 +12,7 @@ use sapling_crypto::{
     jubjub::{edwards, fs::Fs, FixedGenerators, JubjubBls12, Unknown},
     primitives::{Diversifier, Note, PaymentAddress, ProofGenerationKey, ValueCommitment},
 };
+use std::ops::AddAssign;
 use zcash_primitives::{
     merkle_tree::CommitmentTreeWitness,
     redjubjub::{PrivateKey, PublicKey, Signature},

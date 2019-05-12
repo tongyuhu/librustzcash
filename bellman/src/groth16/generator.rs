@@ -1,5 +1,6 @@
 use rand::Rng;
 
+use std::ops::{AddAssign, MulAssign};
 use std::sync::Arc;
 
 use ff::{Field, PrimeField};

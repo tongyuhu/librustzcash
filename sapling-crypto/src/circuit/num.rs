@@ -1,5 +1,6 @@
 use ff::{BitIterator, Field, PrimeField, PrimeFieldRepr};
 use pairing::Engine;
+use std::ops::{AddAssign, MulAssign};
 
 use bellman::{
     SynthesisError,
@@ -459,6 +460,8 @@ mod test {
     use bellman::{ConstraintSystem};
     use ff::{BitIterator, Field, PrimeField};
     use pairing::bls12_381::{Bls12, Fr};
+    use std::ops::SubAssign;
+
     use ::circuit::test::*;
     use super::{AllocatedNum, Boolean};
 

@@ -13,10 +13,24 @@ pub use ff_derive::*;
 use std::error::Error;
 use std::fmt;
 use std::io::{self, Read, Write};
+use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 
 /// This trait represents an element of a field.
 pub trait Field:
-    Sized + Eq + Copy + Clone + Send + Sync + fmt::Debug + fmt::Display + 'static + rand::Rand
+    Sized
+    + Eq
+    + Copy
+    + Clone
+    + Send
+    + Sync
+    + fmt::Debug
+    + fmt::Display
+    + 'static
+    + rand::Rand
+    + FieldOps
+    + for<'r> FieldOps<&'r Self>
+    + FieldAssignOps
+    + for<'r> FieldAssignOps<&'r Self>
 {
     /// Returns the zero element of the field, the additive identity.
     fn zero() -> Self;
@@ -35,15 +49,6 @@ pub trait Field:
 
     /// Negates this element.
     fn negate(&mut self);
-
-    /// Adds another element to this element.
-    fn add_assign(&mut self, other: &Self);
-
-    /// Subtracts another element from this element.
-    fn sub_assign(&mut self, other: &Self);
-
-    /// Multiplies another element by this element.
-    fn mul_assign(&mut self, other: &Self);
 
     /// Computes the multiplicative inverse of this element, if nonzero.
     fn inverse(&self) -> Option<Self>;
@@ -74,6 +79,33 @@ pub trait Field:
         res
     }
 }
+
+/// The trait for types implementing basic field operations.
+///
+/// This is automatically implemented for types which implement the operators.
+pub trait FieldOps<Rhs = Self, Output = Self>:
+    Add<Rhs, Output = Output> + Sub<Rhs, Output = Output> + Mul<Rhs, Output = Output>
+{
+}
+
+impl<T, Rhs, Output> FieldOps<Rhs, Output> for T where
+    T: Add<Rhs, Output = Output> + Sub<Rhs, Output = Output> + Mul<Rhs, Output = Output>
+{
+}
+
+/// The trait for types implementing field assignment operators (like `+=`).
+///
+/// This is automatically implemented for types which implement the operators.
+pub trait FieldAssignOps<Rhs = Self>: AddAssign<Rhs> + SubAssign<Rhs> + MulAssign<Rhs> {}
+
+impl<T, Rhs> FieldAssignOps<Rhs> for T where T: AddAssign<Rhs> + SubAssign<Rhs> + MulAssign<Rhs> {}
+
+/// The trait for references which implement field operations, taking the
+/// second operand either by value or by reference.
+///
+/// This is automatically implemented for types which implement the operators.
+pub trait RefField<Base>: FieldOps<Base, Base> + for<'r> FieldOps<&'r Base, Base> {}
+impl<T, Base> RefField<Base> for T where T: FieldOps<Base, Base> + for<'r> FieldOps<&'r Base, Base> {}
 
 /// This trait represents an element of a field that has a square root operation described for it.
 pub trait SqrtField: Field {

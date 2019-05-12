@@ -1,5 +1,6 @@
 use ff::{Field, PrimeField, PrimeFieldRepr};
 use pairing::Engine;
+use std::ops::{AddAssign, MulAssign};
 
 use bellman::{
     LinearCombination,

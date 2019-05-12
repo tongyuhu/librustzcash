@@ -7,6 +7,7 @@ use sapling_crypto::jubjub::{
     edwards::Point, FixedGenerators, JubjubEngine, JubjubParams, Unknown,
 };
 use std::io::{self, Read, Write};
+use std::ops::{AddAssign, MulAssign};
 
 use util::hash_to_scalar;
 

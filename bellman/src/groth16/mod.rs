@@ -486,9 +486,9 @@ mod test_with_bls12_381 {
     use super::*;
     use {Circuit, SynthesisError, ConstraintSystem};
 
-    use ff::Field;
     use rand::{Rand, thread_rng};
     use pairing::bls12_381::{Bls12, Fr};
+    use std::ops::MulAssign;
 
     #[test]
     fn serialization() {
