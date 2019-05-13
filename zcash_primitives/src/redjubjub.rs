@@ -1,13 +1,13 @@
 //! Implementation of RedJubjub, a specialization of RedDSA to the Jubjub curve.
 //! See section 5.4.6 of the Sapling protocol specification.
 
-use ff::{Field, PrimeField, PrimeFieldRepr};
+use ff::{PrimeField, PrimeFieldRepr};
 use rand::{Rand, Rng};
 use sapling_crypto::jubjub::{
     edwards::Point, FixedGenerators, JubjubEngine, JubjubParams, Unknown,
 };
 use std::io::{self, Read, Write};
-use std::ops::{AddAssign, MulAssign};
+use std::ops::{AddAssign, MulAssign, Neg};
 
 use util::hash_to_scalar;
 
@@ -194,7 +194,7 @@ pub fn batch_verify<'a, E: JubjubEngine, R: Rng>(
         let z = E::Fs::rand(rng);
 
         s.mul_assign(&z);
-        s.negate();
+        s = s.neg();
 
         r = r.mul(z, params);
 

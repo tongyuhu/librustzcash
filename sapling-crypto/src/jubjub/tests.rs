@@ -13,7 +13,7 @@ use ff::{
     SqrtField,
     LegendreSymbol
 };
-use std::ops::{AddAssign, MulAssign, SubAssign};
+use std::ops::{AddAssign, MulAssign, Neg, SubAssign};
 
 use rand::{XorShiftRng, SeedableRng, Rand};
 
@@ -306,8 +306,7 @@ fn test_back_and_forth<E: JubjubEngine>(params: &E::Params) {
 
 fn test_jubjub_params<E: JubjubEngine>(params: &E::Params) {
     // a = -1
-    let mut a = E::Fr::one();
-    a.negate();
+    let a = E::Fr::one().neg();
 
     {
         // Check that 2A is consistent with A
@@ -335,7 +334,7 @@ fn test_jubjub_params<E: JubjubEngine>(params: &E::Params) {
         assert!(tmp.inverse().unwrap().legendre() == LegendreSymbol::QuadraticNonResidue);
 
         // tmp = -d
-        tmp.negate();
+        tmp = tmp.neg();
 
         // -d is nonsquare
         assert!(tmp.legendre() == LegendreSymbol::QuadraticNonResidue);

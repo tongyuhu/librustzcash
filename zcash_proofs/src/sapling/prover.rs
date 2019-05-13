@@ -12,7 +12,7 @@ use sapling_crypto::{
     jubjub::{edwards, fs::Fs, FixedGenerators, JubjubBls12, Unknown},
     primitives::{Diversifier, Note, PaymentAddress, ProofGenerationKey, ValueCommitment},
 };
-use std::ops::AddAssign;
+use std::ops::{AddAssign, Neg};
 use zcash_primitives::{
     merkle_tree::CommitmentTreeWitness,
     redjubjub::{PrivateKey, PublicKey, Signature},
@@ -203,7 +203,7 @@ impl SaplingProvingContext {
         // Accumulate the value commitment randomness in the context
         {
             let mut tmp = rcv.clone();
-            tmp.negate(); // Outputs subtract from the total.
+            tmp = tmp.neg(); // Outputs subtract from the total.
             tmp.add_assign(&self.bsk);
 
             // Update the context

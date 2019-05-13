@@ -1,6 +1,6 @@
 use ff::{Field, PrimeField, PrimeFieldRepr};
 use jubjub::*;
-use std::ops::AddAssign;
+use std::ops::{AddAssign, Neg};
 
 #[derive(Copy, Clone)]
 pub enum Personalization {
@@ -60,7 +60,7 @@ pub fn pedersen_hash<E, I>(
 
             // conditionally negate
             if c {
-                tmp.negate();
+                tmp = tmp.neg();
             }
 
             acc.add_assign(&tmp);

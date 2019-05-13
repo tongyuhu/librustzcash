@@ -23,7 +23,7 @@ pub mod groth16;
 
 use ff::{Field, ScalarEngine};
 
-use std::ops::{Add, MulAssign, Sub};
+use std::ops::{Add, MulAssign, Neg, Sub};
 use std::fmt;
 use std::error::Error;
 use std::io;
@@ -97,10 +97,8 @@ impl<E: ScalarEngine> Add<(E::Fr, Variable)> for LinearCombination<E> {
 impl<E: ScalarEngine> Sub<(E::Fr, Variable)> for LinearCombination<E> {
     type Output = LinearCombination<E>;
 
-    fn sub(self, (mut coeff, var): (E::Fr, Variable)) -> LinearCombination<E> {
-        coeff.negate();
-
-        self + (coeff, var)
+    fn sub(self, (coeff, var): (E::Fr, Variable)) -> LinearCombination<E> {
+        self + (coeff.neg(), var)
     }
 }
 

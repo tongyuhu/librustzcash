@@ -1,6 +1,6 @@
 use ff::Field;
 use pairing::Engine;
-use std::ops::AddAssign;
+use std::ops::{AddAssign, Neg};
 
 use super::*;
 use super::num::{
@@ -23,8 +23,7 @@ fn synth<'a, E: Engine, I>(
     assert_eq!(assignment.len(), 1 << window_size);
 
     for (i, constant) in constants.into_iter().enumerate() {
-        let mut cur = assignment[i];
-        cur.negate();
+        let mut cur = assignment[i].neg();
         cur.add_assign(constant);
         assignment[i] = cur;
         for (j, eval) in assignment.iter_mut().enumerate().skip(i + 1) {
@@ -158,7 +157,7 @@ pub fn lookup3_xy_with_conditional_negation<E: Engine, CS>(
         || {
             let mut tmp = coords[*i.get()?].1;
             if *bits[2].get_value().get()? {
-                tmp.negate();
+                tmp = tmp.neg();
             }
             Ok(tmp)
         }
@@ -279,7 +278,7 @@ mod test {
 
             assert_eq!(res.0.get_value().unwrap(), points[index].0);
             let mut tmp = points[index].1;
-            if c_val { tmp.negate() }
+            if c_val { tmp = tmp.neg() }
             assert_eq!(res.1.get_value().unwrap(), tmp);
         }
     }

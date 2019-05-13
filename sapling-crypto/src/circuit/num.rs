@@ -460,7 +460,7 @@ mod test {
     use bellman::{ConstraintSystem};
     use ff::{BitIterator, Field, PrimeField};
     use pairing::bls12_381::{Bls12, Fr};
-    use std::ops::SubAssign;
+    use std::ops::{Neg, SubAssign};
 
     use ::circuit::test::*;
     use super::{AllocatedNum, Boolean};
@@ -557,8 +557,7 @@ mod test {
 
     #[test]
     fn test_into_bits_strict() {
-        let mut negone = Fr::one();
-        negone.negate();
+        let negone = Fr::one().neg();
 
         let mut cs = TestConstraintSystem::<Bls12>::new();
 

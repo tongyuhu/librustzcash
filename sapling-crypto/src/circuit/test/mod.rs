@@ -1,6 +1,6 @@
 use ff::{Field, PrimeField, PrimeFieldRepr};
 use pairing::Engine;
-use std::ops::{AddAssign, MulAssign};
+use std::ops::{AddAssign, MulAssign, Neg};
 
 use bellman::{
     LinearCombination,
@@ -162,11 +162,7 @@ impl<E: Engine> TestConstraintSystem<E> {
     pub fn pretty_print(&self) -> String {
         let mut s = String::new();
 
-        let negone = {
-            let mut tmp = E::Fr::one();
-            tmp.negate();
-            tmp
-        };
+        let negone = E::Fr::one().neg();
 
         let powers_of_two = (0..E::Fr::NUM_BITS).map(|i| {
             E::Fr::from_str("2").unwrap().pow(&[i as u64])

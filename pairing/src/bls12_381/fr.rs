@@ -9,6 +9,9 @@ pub struct Fr(FrRepr);
 #[cfg(test)]
 use rand::{Rand, SeedableRng, XorShiftRng};
 
+#[cfg(test)]
+use std::ops::Neg;
+
 #[test]
 fn test_fr_repr_ordering() {
     fn assert_equality(a: FrRepr, b: FrRepr) {
@@ -739,10 +742,9 @@ fn test_fr_double() {
 }
 
 #[test]
-fn test_fr_negate() {
+fn test_fr_neg() {
     {
-        let mut a = Fr::zero();
-        a.negate();
+        let a = Fr::zero().neg();
 
         assert!(a.is_zero());
     }
@@ -752,8 +754,7 @@ fn test_fr_negate() {
     for _ in 0..1000 {
         // Ensure (a - (-a)) = 0.
         let mut a = Fr::rand(&mut rng);
-        let mut b = a;
-        b.negate();
+        let b = a.neg();
         a.add_assign(&b);
 
         assert!(a.is_zero());
@@ -795,8 +796,7 @@ fn test_fr_sqrt() {
     for _ in 0..1000 {
         // Ensure sqrt(a^2) = a or -a
         let a = Fr::rand(&mut rng);
-        let mut nega = a;
-        nega.negate();
+        let nega = a.neg();
         let mut b = a;
         b.square();
 

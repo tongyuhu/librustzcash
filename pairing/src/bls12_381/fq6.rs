@@ -2,7 +2,7 @@ use super::fq::{FROBENIUS_COEFF_FQ6_C1, FROBENIUS_COEFF_FQ6_C2};
 use super::fq2::Fq2;
 use ff::Field;
 use rand::{Rand, Rng};
-use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 /// An element of Fq6, represented by c0 + c1 * v + c2 * v^(2).
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -24,6 +24,18 @@ impl Rand for Fq6 {
             c0: rng.gen(),
             c1: rng.gen(),
             c2: rng.gen(),
+        }
+    }
+}
+
+impl Neg for Fq6 {
+    type Output = Self;
+
+    fn neg(self) -> Self {
+        Fq6 {
+            c0: self.c0.neg(),
+            c1: self.c1.neg(),
+            c2: self.c2.neg(),
         }
     }
 }
@@ -282,12 +294,6 @@ impl Field for Fq6 {
         self.c2.double();
     }
 
-    fn negate(&mut self) {
-        self.c0.negate();
-        self.c1.negate();
-        self.c2.negate();
-    }
-
     fn frobenius_map(&mut self, power: usize) {
         self.c0.frobenius_map(power);
         self.c1.frobenius_map(power);
@@ -334,7 +340,7 @@ impl Field for Fq6 {
         let mut c0 = self.c2;
         c0.mul_by_nonresidue();
         c0.mul_assign(&self.c1);
-        c0.negate();
+        let mut c0 = c0.neg();
         {
             let mut c0s = self.c0;
             c0s.square();

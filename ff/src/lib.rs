@@ -13,7 +13,7 @@ pub use ff_derive::*;
 use std::error::Error;
 use std::fmt;
 use std::io::{self, Read, Write};
-use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 /// This trait represents an element of a field.
 pub trait Field:
@@ -46,9 +46,6 @@ pub trait Field:
 
     /// Doubles this element.
     fn double(&mut self);
-
-    /// Negates this element.
-    fn negate(&mut self);
 
     /// Computes the multiplicative inverse of this element, if nonzero.
     fn inverse(&self) -> Option<Self>;
@@ -84,12 +81,18 @@ pub trait Field:
 ///
 /// This is automatically implemented for types which implement the operators.
 pub trait FieldOps<Rhs = Self, Output = Self>:
-    Add<Rhs, Output = Output> + Sub<Rhs, Output = Output> + Mul<Rhs, Output = Output>
+    Neg<Output = Output>
+    + Add<Rhs, Output = Output>
+    + Sub<Rhs, Output = Output>
+    + Mul<Rhs, Output = Output>
 {
 }
 
 impl<T, Rhs, Output> FieldOps<Rhs, Output> for T where
-    T: Add<Rhs, Output = Output> + Sub<Rhs, Output = Output> + Mul<Rhs, Output = Output>
+    T: Neg<Output = Output>
+        + Add<Rhs, Output = Output>
+        + Sub<Rhs, Output = Output>
+        + Mul<Rhs, Output = Output>
 {
 }
 

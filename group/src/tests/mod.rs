@@ -1,4 +1,5 @@
 use rand::{Rand, Rng, SeedableRng, XorShiftRng};
+use std::ops::Neg;
 
 use {CurveAffine, CurveProjective, EncodedPoint};
 
@@ -179,16 +180,13 @@ fn random_wnaf_tests<G: CurveProjective>() {
 }
 
 fn random_negation_tests<G: CurveProjective>() {
-    use ff::Field;
-
     let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
     for _ in 0..1000 {
         let r = G::rand(&mut rng);
 
         let s = G::Scalar::rand(&mut rng);
-        let mut sneg = s;
-        sneg.negate();
+        let sneg = s.neg();
 
         let mut t1 = r;
         t1.mul_assign(s);

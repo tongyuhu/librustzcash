@@ -4,7 +4,7 @@ use ff::{
     LegendreSymbol::{self, *},
     PrimeField, PrimeFieldDecodingError, PrimeFieldRepr, SqrtField,
 };
-use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 use super::ToUniform;
 
@@ -262,6 +262,20 @@ impl From<Fs> for FsRepr {
     }
 }
 
+impl Neg for Fs {
+    type Output = Self;
+
+    #[inline]
+    fn neg(mut self) -> Self {
+        if !self.is_zero() {
+            let mut tmp = MODULUS;
+            tmp.sub_noborrow(&self.0);
+            self.0 = tmp;
+        }
+        self
+    }
+}
+
 impl<'r> Add<&'r Fs> for Fs {
     type Output = Self;
 
@@ -462,15 +476,6 @@ impl Field for Fs {
 
         // However, it may need to be reduced.
         self.reduce();
-    }
-
-    #[inline]
-    fn negate(&mut self) {
-        if !self.is_zero() {
-            let mut tmp = MODULUS;
-            tmp.sub_noborrow(&self.0);
-            self.0 = tmp;
-        }
     }
 
     fn inverse(&self) -> Option<Self> {
@@ -703,8 +708,7 @@ impl SqrtField for Fs {
 
 #[test]
 fn test_neg_one() {
-    let mut o = Fs::one();
-    o.negate();
+    let o = Fs::one().neg();
 
     assert_eq!(NEGATIVE_ONE, o);
 }
@@ -1158,10 +1162,9 @@ fn test_fs_double() {
 }
 
 #[test]
-fn test_fs_negate() {
+fn test_fs_neg() {
     {
-        let mut a = Fs::zero();
-        a.negate();
+        let a = Fs::zero().neg();
 
         assert!(a.is_zero());
     }
@@ -1171,8 +1174,7 @@ fn test_fs_negate() {
     for _ in 0..1000 {
         // Ensure (a - (-a)) = 0.
         let mut a = Fs::rand(&mut rng);
-        let mut b = a;
-        b.negate();
+        let b = a.neg();
         a.add_assign(&b);
 
         assert!(a.is_zero());
@@ -1212,8 +1214,7 @@ fn test_fs_sqrt() {
     for _ in 0..1000 {
         // Ensure sqrt(a^2) = a or -a
         let a = Fs::rand(&mut rng);
-        let mut nega = a;
-        nega.negate();
+        let nega = a.neg();
         let mut b = a;
         b.square();
 
