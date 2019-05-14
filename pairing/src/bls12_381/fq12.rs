@@ -4,6 +4,7 @@ use super::fq6::Fq6;
 use ff::Field;
 use rand::{Rand, Rng};
 use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use subtle::{Choice, ConditionallySelectable};
 
 /// An element of Fq12, represented by c0 + c1 * w.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -23,6 +24,15 @@ impl Rand for Fq12 {
         Fq12 {
             c0: rng.gen(),
             c1: rng.gen(),
+        }
+    }
+}
+
+impl ConditionallySelectable for Fq12 {
+    fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
+        Fq12 {
+            c0: Fq6::conditional_select(&a.c0, &b.c0, choice),
+            c1: Fq6::conditional_select(&a.c1, &b.c1, choice),
         }
     }
 }

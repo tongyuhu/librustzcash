@@ -9,6 +9,7 @@ use std::fmt;
 use rand::{Rand, Rng};
 use std::num::Wrapping;
 use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use subtle::{Choice, ConditionallySelectable};
 
 const MODULUS_R: Wrapping<u32> = Wrapping(64513);
 
@@ -24,6 +25,12 @@ impl fmt::Display for Fr {
 impl Rand for Fr {
     fn rand<R: Rng>(rng: &mut R) -> Self {
         Fr(Wrapping(rng.gen()) % MODULUS_R)
+    }
+}
+
+impl ConditionallySelectable for Fr {
+    fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
+        Fr(Wrapping(u32::conditional_select(&(a.0).0, &(b.0).0, choice)))
     }
 }
 

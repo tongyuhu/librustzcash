@@ -2,6 +2,7 @@
 
 extern crate byteorder;
 extern crate rand;
+extern crate subtle;
 
 #[cfg(feature = "derive")]
 #[macro_use]
@@ -14,6 +15,7 @@ use std::error::Error;
 use std::fmt;
 use std::io::{self, Read, Write};
 use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use subtle::ConditionallySelectable;
 
 /// This trait represents an element of a field.
 pub trait Field:
@@ -27,6 +29,7 @@ pub trait Field:
     + fmt::Display
     + 'static
     + rand::Rand
+    + ConditionallySelectable
     + FieldOps
     + for<'r> FieldOps<&'r Self>
     + FieldAssignOps

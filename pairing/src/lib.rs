@@ -15,6 +15,7 @@ extern crate byteorder;
 extern crate ff;
 extern crate group;
 extern crate rand;
+extern crate subtle;
 
 #[cfg(test)]
 pub mod tests;

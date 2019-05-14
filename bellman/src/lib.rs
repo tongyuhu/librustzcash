@@ -7,6 +7,7 @@ extern crate rand;
 extern crate futures;
 extern crate bit_vec;
 extern crate byteorder;
+extern crate subtle;
 
 #[cfg(feature = "multicore")]
 extern crate crossbeam;

@@ -12,6 +12,7 @@ repository = "https://github.com/ebfull/ff"
 byteorder = "1"
 rand = "0.4"
 ff_derive = { version = "0.3.0", path = "ff_derive", optional = true }
+subtle = "2.1"
 
 [features]
 default = []
