@@ -289,8 +289,7 @@ impl<E: Engine> AllocatedNum<E> {
         let mut value = None;
 
         let var = cs.alloc(|| "squared num", || {
-            let mut tmp = *self.value.get()?;
-            tmp.square();
+            let tmp = self.value.get()?.square();
 
             value = Some(tmp);
 

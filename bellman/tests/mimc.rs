@@ -61,8 +61,7 @@ fn mimc<E: Engine>(
     for i in 0..MIMC_ROUNDS {
         let mut tmp1 = xl;
         tmp1.add_assign(&constants[i]);
-        let mut tmp2 = tmp1;
-        tmp2.square();
+        let mut tmp2 = tmp1.square();
         tmp2.mul_assign(&tmp1);
         tmp2.add_assign(&xr);
         xr = xl;
@@ -110,8 +109,7 @@ impl<'a, E: Engine> Circuit<E> for MiMCDemo<'a, E> {
             // tmp = (xL + Ci)^2
             let mut tmp_value = xl_value.map(|mut e| {
                 e.add_assign(&self.constants[i]);
-                e.square();
-                e
+                e.square()
             });
             let mut tmp = cs.alloc(|| "tmp", || {
                 tmp_value.ok_or(SynthesisError::AssignmentMissing)

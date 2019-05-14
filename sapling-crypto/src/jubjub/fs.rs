@@ -543,7 +543,7 @@ impl Field for Fs {
     }
 
     #[inline]
-    fn square(&mut self)
+    fn square(&self) -> Self
     {
         let mut carry = 0;
         let r1 = mac_with_carry(0, (self.0).0[0], (self.0).0[1], &mut carry);
@@ -575,7 +575,10 @@ impl Field for Fs {
         let r5 = adc(r5, 0, &mut carry);
         let r6 = mac_with_carry(r6, (self.0).0[3], (self.0).0[3], &mut carry);
         let r7 = adc(r7, 0, &mut carry);
-        self.mont_reduce(r0, r1, r2, r3, r4, r5, r6, r7);
+
+        let mut ret = *self;
+        ret.mont_reduce(r0, r1, r2, r3, r4, r5, r6, r7);
+        ret
     }
 }
 
@@ -693,8 +696,7 @@ impl SqrtField for Fs {
 
         // a1 = self^((s - 3) // 4)
         let mut a1 = self.pow([0xb425c397b5bdcb2d, 0x299a0824f3320420, 0x4199cec0404d0ec0, 0x39f6d3a994cebea]);
-        let mut a0 = a1;
-        a0.square();
+        let mut a0 = a1.square();
         a0.mul_assign(self);
 
         if a0 == NEGATIVE_ONE
@@ -1113,10 +1115,9 @@ fn test_fs_mul_assign() {
 
 #[test]
 fn test_fr_squaring() {
-    let mut a = Fs(FsRepr([0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff, 0xe7db4ea6533afa8]));
+    let a = Fs(FsRepr([0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff, 0xe7db4ea6533afa8]));
     assert!(a.is_valid());
-    a.square();
-    assert_eq!(a, Fs::from_repr(FsRepr([0x12c7f55cbc52fbaa, 0xdedc98a0b5e6ce9e, 0xad2892726a5396a, 0x9fe82af8fee77b3])).unwrap());
+    assert_eq!(a.square(), Fs::from_repr(FsRepr([0x12c7f55cbc52fbaa, 0xdedc98a0b5e6ce9e, 0xad2892726a5396a, 0x9fe82af8fee77b3])).unwrap());
 
     let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
@@ -1124,8 +1125,7 @@ fn test_fr_squaring() {
         // Ensure that (a * a) = a^2
         let a = Fs::rand(&mut rng);
 
-        let mut tmp = a;
-        tmp.square();
+        let tmp = a.square();
 
         let mut tmp2 = a;
         tmp2.mul_assign(&a);
@@ -1216,8 +1216,7 @@ fn test_fs_sqrt() {
         // Ensure sqrt(a^2) = a or -a
         let a = Fs::rand(&mut rng);
         let nega = a.neg();
-        let mut b = a;
-        b.square();
+        let b = a.square();
 
         let b = b.sqrt().unwrap();
 
@@ -1229,9 +1228,7 @@ fn test_fs_sqrt() {
         let a = Fs::rand(&mut rng);
 
         if let Some(mut tmp) = a.sqrt() {
-            tmp.square();
-
-            assert_eq!(a, tmp);
+            assert_eq!(a, tmp.square());
         }
     }
 }

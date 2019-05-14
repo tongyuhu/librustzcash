@@ -42,7 +42,8 @@ pub trait Field:
     fn is_zero(&self) -> bool;
 
     /// Squares this element.
-    fn square(&mut self);
+    #[must_use]
+    fn square(&self) -> Self;
 
     /// Doubles this element.
     #[must_use]
@@ -64,7 +65,7 @@ pub trait Field:
 
         for i in BitIterator::new(exp) {
             if found_one {
-                res.square();
+                res = res.square();
             } else {
                 found_one = i;
             }

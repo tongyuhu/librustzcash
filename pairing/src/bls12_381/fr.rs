@@ -676,16 +676,15 @@ fn test_fr_mul_assign() {
 
 #[test]
 fn test_fr_squaring() {
-    let mut a = Fr(FrRepr([
+    let a = Fr(FrRepr([
         0xffffffffffffffff,
         0xffffffffffffffff,
         0xffffffffffffffff,
         0x73eda753299d7d47,
     ]));
     assert!(a.is_valid());
-    a.square();
     assert_eq!(
-        a,
+        a.square(),
         Fr::from_repr(FrRepr([
             0xc0d698e7bde077b8,
             0xb79a310579e76ec2,
@@ -699,14 +698,7 @@ fn test_fr_squaring() {
     for _ in 0..1000000 {
         // Ensure that (a * a) = a^2
         let a = Fr::rand(&mut rng);
-
-        let mut tmp = a;
-        tmp.square();
-
-        let mut tmp2 = a;
-        tmp2.mul_assign(&a);
-
-        assert_eq!(tmp, tmp2);
+        assert_eq!(a.square(), a * a);
     }
 }
 
@@ -794,8 +786,7 @@ fn test_fr_sqrt() {
         // Ensure sqrt(a^2) = a or -a
         let a = Fr::rand(&mut rng);
         let nega = a.neg();
-        let mut b = a;
-        b.square();
+        let b = a.square();
 
         let b = b.sqrt().unwrap();
 
@@ -807,9 +798,7 @@ fn test_fr_sqrt() {
         let a = Fr::rand(&mut rng);
 
         if let Some(mut tmp) = a.sqrt() {
-            tmp.square();
-
-            assert_eq!(a, tmp);
+            assert_eq!(a, tmp.square());
         }
     }
 }
