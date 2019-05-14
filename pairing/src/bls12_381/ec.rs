@@ -259,7 +259,7 @@ macro_rules! curve_impl {
                 }
 
                 // Invert `tmp`.
-                tmp = tmp.inverse().unwrap(); // Guaranteed to be nonzero.
+                tmp = tmp.invert().unwrap(); // Guaranteed to be nonzero.
 
                 // Second pass: iterate backwards to compute inverses
                 for (g, s) in v.iter_mut()
@@ -576,7 +576,7 @@ macro_rules! curve_impl {
                     }
                 } else {
                     // Z is nonzero, so it must have an inverse in a field.
-                    let zinv = p.z.inverse().unwrap();
+                    let zinv = p.z.invert().unwrap();
                     let mut zinv_powered = zinv.square();
 
                     // X/Z^2

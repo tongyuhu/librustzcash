@@ -322,7 +322,7 @@ impl<E: Engine> AllocatedNum<E> {
             if tmp.is_zero() {
                 Err(SynthesisError::DivisionByZero)
             } else {
-                Ok(tmp.inverse().unwrap())
+                Ok(tmp.invert().unwrap())
             }
         })?;
 

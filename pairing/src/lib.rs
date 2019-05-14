@@ -24,6 +24,7 @@ pub mod bls12_381;
 
 use ff::{Field, PrimeField, ScalarEngine, SqrtField};
 use group::{CurveAffine, CurveProjective};
+use subtle::CtOption;
 
 /// An "engine" is a collection of types (fields, elliptic curve groups, etc.)
 /// with well-defined relationships. In particular, the G1/G2 curve groups are
@@ -89,7 +90,7 @@ pub trait Engine: ScalarEngine {
         >;
 
     /// Perform final exponentiation of the result of a miller loop.
-    fn final_exponentiation(&Self::Fqk) -> Option<Self::Fqk>;
+    fn final_exponentiation(&Self::Fqk) -> CtOption<Self::Fqk>;
 
     /// Performs a complete pairing operation `(p, q)`.
     fn pairing<G1, G2>(p: G1, q: G2) -> Self::Fqk

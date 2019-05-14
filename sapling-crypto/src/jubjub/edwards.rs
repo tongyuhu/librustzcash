@@ -1,5 +1,6 @@
 use ff::{BitIterator, Field, PrimeField, PrimeFieldRepr, SqrtField};
 use std::ops::{AddAssign, MulAssign, Neg, SubAssign};
+use subtle::{Choice, CtOption};
 
 use super::{
     JubjubEngine,
@@ -115,11 +116,11 @@ impl<E: JubjubEngine> Point<E, Unknown> {
 
         match E::Fr::from_repr(y_repr) {
             Ok(y) => {
-                match Self::get_for_y(y, x_sign, params) {
-                    Some(p) => Ok(p),
-                    None => {
-                        Err(io::Error::new(io::ErrorKind::InvalidInput, "not on curve"))
-                    }
+                let p = Self::get_for_y(y, x_sign, params);
+                if bool::from(p.is_some()) {
+                    Ok(p.unwrap())
+                } else {
+                    Err(io::Error::new(io::ErrorKind::InvalidInput, "not on curve"))
                 }
             },
             Err(_) => {
@@ -128,7 +129,7 @@ impl<E: JubjubEngine> Point<E, Unknown> {
         }
     }
 
-    pub fn get_for_y(y: E::Fr, sign: bool, params: &E::Params) -> Option<Self>
+    pub fn get_for_y(y: E::Fr, sign: bool, params: &E::Params) -> CtOption<Self>
     {
         // Given a y on the curve, x^2 = (y^2 - 1) / (dy^2 + 1)
         // This is defined for all valid y-coordinates,
@@ -145,33 +146,30 @@ impl<E: JubjubEngine> Point<E, Unknown> {
         // tmp1 = y^2 - 1
         tmp1.sub_assign(&E::Fr::one());
 
-        match tmp2.inverse() {
-            Some(tmp2) => {
-                // tmp1 = (y^2 - 1) / (dy^2 + 1)
-                tmp1.mul_assign(&tmp2);
+        tmp2.invert().and_then(|tmp2| {
+            // tmp1 = (y^2 - 1) / (dy^2 + 1)
+            tmp1.mul_assign(&tmp2);
 
-                match tmp1.sqrt() {
-                    Some(mut x) => {
-                        if x.into_repr().is_odd() != sign {
-                            x = x.neg();
-                        }
-
-                        let mut t = x;
-                        t.mul_assign(&y);
-
-                        Some(Point {
-                            x: x,
-                            y: y,
-                            t: t,
-                            z: E::Fr::one(),
-                            _marker: PhantomData
-                        })
-                    },
-                    None => None
+            match tmp1.sqrt().map(|mut x| {
+                if x.into_repr().is_odd() != sign {
+                    x = x.neg();
                 }
-            },
-            None => None
-        }
+
+                let mut t = x;
+                t.mul_assign(&y);
+
+                Point {
+                    x: x,
+                    y: y,
+                    t: t,
+                    z: E::Fr::one(),
+                    _marker: PhantomData
+                }
+            }) {
+                Some(p) => CtOption::new(p, Choice::from(1)),
+                None => CtOption::new(Point::zero(), Choice::from(0)),
+            }
+        })
     }
 
     /// This guarantees the point is in the prime order subgroup
@@ -190,8 +188,9 @@ impl<E: JubjubEngine> Point<E, Unknown> {
         loop {
             let y: E::Fr = rng.gen();
 
-            if let Some(p) = Self::get_for_y(y, rng.gen(), params) {
-                return p;
+            let p = Self::get_for_y(y, rng.gen(), params);
+            if bool::from(p.is_some()) {
+                return p.unwrap();
             }
         }
     }
@@ -344,7 +343,7 @@ impl<E: JubjubEngine, Subgroup> Point<E, Subgroup> {
 
     pub fn into_xy(&self) -> (E::Fr, E::Fr)
     {
-        let zinv = self.z.inverse().unwrap();
+        let zinv = self.z.invert().unwrap();
 
         let mut x = self.x;
         x.mul_assign(&zinv);

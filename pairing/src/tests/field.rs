@@ -68,7 +68,7 @@ pub fn random_field_tests<F: Field>() {
         assert!(z.is_zero());
     }
 
-    assert!(F::zero().inverse().is_none());
+    assert!(bool::from(F::zero().invert().is_none()));
 
     // Multiplication by zero
     {
@@ -209,11 +209,11 @@ fn random_squaring_tests<F: Field, R: Rng>(rng: &mut R) {
 }
 
 fn random_inversion_tests<F: Field, R: Rng>(rng: &mut R) {
-    assert!(F::zero().inverse().is_none());
+    assert!(bool::from(F::zero().invert().is_none()));
 
     for _ in 0..10000 {
         let mut a = F::rand(rng);
-        let b = a.inverse().unwrap(); // probablistically nonzero
+        let b = a.invert().unwrap(); // probablistically nonzero
         a.mul_assign(&b);
 
         assert_eq!(a, F::one());

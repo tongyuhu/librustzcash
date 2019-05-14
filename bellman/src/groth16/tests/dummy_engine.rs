@@ -9,12 +9,18 @@ use std::fmt;
 use rand::{Rand, Rng};
 use std::num::Wrapping;
 use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
-use subtle::{Choice, ConditionallySelectable};
+use subtle::{Choice, ConditionallySelectable, CtOption};
 
 const MODULUS_R: Wrapping<u32> = Wrapping(64513);
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Fr(Wrapping<u32>);
+
+impl Default for Fr {
+    fn default() -> Self {
+        <Fr as Field>::zero()
+    }
+}
 
 impl fmt::Display for Fr {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
@@ -157,11 +163,11 @@ impl Field for Fr {
         Fr((self.0 << 1) % MODULUS_R)
     }
 
-    fn inverse(&self) -> Option<Self> {
+    fn invert(&self) -> CtOption<Self> {
         if <Fr as Field>::is_zero(self) {
-            None
+            CtOption::new(<Fr as Field>::zero(), Choice::from(0))
         } else {
-            Some(self.pow(&[(MODULUS_R.0 as u64) - 2]))
+            CtOption::new(self.pow(&[(MODULUS_R.0 as u64) - 2]), Choice::from(1))
         }
     }
 
@@ -379,9 +385,9 @@ impl Engine for DummyEngine {
     }
 
     /// Perform final exponentiation of the result of a miller loop.
-    fn final_exponentiation(this: &Self::Fqk) -> Option<Self::Fqk>
+    fn final_exponentiation(this: &Self::Fqk) -> CtOption<Self::Fqk>
     {
-        Some(*this)
+        CtOption::new(*this, Choice::from(1))
     }
 }
 

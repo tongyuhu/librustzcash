@@ -3,10 +3,10 @@ use ff::{Field, SqrtField};
 use rand::{Rand, Rng};
 use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use std::cmp::Ordering;
-use subtle::{Choice, ConditionallySelectable};
+use subtle::{Choice, ConditionallySelectable, CtOption};
 
 /// An element of Fq2, represented by c0 + c1 * u.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
 pub struct Fq2 {
     pub c0: Fq,
     pub c1: Fq,
@@ -230,11 +230,11 @@ impl Field for Fq2 {
         }
     }
 
-    fn inverse(&self) -> Option<Self> {
+    fn invert(&self) -> CtOption<Self> {
         let t1 = self.c1.square();
         let mut t0 = self.c0.square();
         t0.add_assign(&t1);
-        t0.inverse().map(|t| {
+        t0.invert().map(|t| {
             Fq2 {
                 c0: self.c0.mul(&t),
                 c1: self.c1.mul(&t).neg(),
@@ -492,11 +492,11 @@ fn test_fq2_mul() {
 }
 
 #[test]
-fn test_fq2_inverse() {
+fn test_fq2_invert() {
     use super::fq::FqRepr;
     use ff::PrimeField;
 
-    assert!(Fq2::zero().inverse().is_none());
+    assert!(bool::from(Fq2::zero().invert().is_none()));
 
     let a = Fq2 {
         c0: Fq::from_repr(FqRepr([
@@ -516,7 +516,7 @@ fn test_fq2_inverse() {
             0x180c3ee46656b008,
         ])).unwrap(),
     };
-    let a = a.inverse().unwrap();
+    let a = a.invert().unwrap();
     assert_eq!(
         a,
         Fq2 {

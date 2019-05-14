@@ -385,15 +385,11 @@ impl<E: JubjubEngine> EdwardsPoint<E> {
             let mut t1 = E::Fr::one();
             t1.add_assign(c.get_value().get()?);
 
-            match t1.inverse() {
-                Some(t1) => {
-                    t0.mul_assign(&t1);
-
-                    Ok(t0)
-                },
-                None => {
-                    Err(SynthesisError::DivisionByZero)
-                }
+            let res = t1.invert().map(|t1| t0 * &t1);
+            if bool::from(res.is_some()) {
+                Ok(res.unwrap())
+            } else {
+                Err(SynthesisError::DivisionByZero)
             }
         })?;
 
@@ -415,15 +411,11 @@ impl<E: JubjubEngine> EdwardsPoint<E> {
             let mut t1 = E::Fr::one();
             t1.sub_assign(c.get_value().get()?);
 
-            match t1.inverse() {
-                Some(t1) => {
-                    t0.mul_assign(&t1);
-
-                    Ok(t0)
-                },
-                None => {
-                    Err(SynthesisError::DivisionByZero)
-                }
+            let res = t1.invert().map(|t1| t0 * &t1);
+            if bool::from(res.is_some()) {
+                Ok(res.unwrap())
+            } else {
+                Err(SynthesisError::DivisionByZero)
             }
         })?;
 
@@ -503,15 +495,11 @@ impl<E: JubjubEngine> EdwardsPoint<E> {
             let mut t1 = E::Fr::one();
             t1.add_assign(c.get_value().get()?);
 
-            match t1.inverse() {
-                Some(t1) => {
-                    t0.mul_assign(&t1);
-
-                    Ok(t0)
-                },
-                None => {
-                    Err(SynthesisError::DivisionByZero)
-                }
+            let ret = t1.invert().map(|t1| t0 * &t1);
+            if bool::from(ret.is_some()) {
+                Ok(ret.unwrap())
+            } else {
+                Err(SynthesisError::DivisionByZero)
             }
         })?;
 
@@ -533,15 +521,11 @@ impl<E: JubjubEngine> EdwardsPoint<E> {
             let mut t1 = E::Fr::one();
             t1.sub_assign(c.get_value().get()?);
 
-            match t1.inverse() {
-                Some(t1) => {
-                    t0.mul_assign(&t1);
-
-                    Ok(t0)
-                },
-                None => {
-                    Err(SynthesisError::DivisionByZero)
-                }
+            let ret = t1.invert().map(|t1| t0 * &t1);
+            if bool::from(ret.is_some()) {
+                Ok(ret.unwrap())
+            } else {
+                Err(SynthesisError::DivisionByZero)
             }
         })?;
 
@@ -582,15 +566,11 @@ impl<E: JubjubEngine> MontgomeryPoint<E> {
             let mut t0 = *self.x.get_value().get()?;
             t0.mul_assign(params.scale());
 
-            match self.y.get_value().get()?.inverse() {
-                Some(invy) => {
-                    t0.mul_assign(&invy);
-
-                    Ok(t0)
-                },
-                None => {
-                    Err(SynthesisError::DivisionByZero)
-                }
+            let ret = self.y.get_value().get()?.invert().map(|invy| t0 * &invy);
+            if bool::from(ret.is_some()) {
+                Ok(ret.unwrap())
+            } else {
+                Err(SynthesisError::DivisionByZero)
             }
         })?;
 
@@ -608,15 +588,11 @@ impl<E: JubjubEngine> MontgomeryPoint<E> {
             t0.sub_assign(&E::Fr::one());
             t1.add_assign(&E::Fr::one());
 
-            match t1.inverse() {
-                Some(t1) => {
-                    t0.mul_assign(&t1);
-
-                    Ok(t0)
-                },
-                None => {
-                    Err(SynthesisError::DivisionByZero)
-                }
+            let ret = t1.invert().map(|t1| t0 * &t1);
+            if bool::from(ret.is_some()) {
+                Ok(ret.unwrap())
+            } else {
+                Err(SynthesisError::DivisionByZero)
             }
         })?;
 
@@ -669,14 +645,11 @@ impl<E: JubjubEngine> MontgomeryPoint<E> {
             let mut d = *other.x.get_value().get()?;
             d.sub_assign(self.x.get_value().get()?);
 
-            match d.inverse() {
-                Some(d) => {
-                    n.mul_assign(&d);
-                    Ok(n)
-                },
-                None => {
-                    Err(SynthesisError::DivisionByZero)
-                }
+            let ret = d.invert().map(|d| n * &d);
+            if bool::from(ret.is_some()) {
+                Ok(ret.unwrap())
+            } else {
+                Err(SynthesisError::DivisionByZero)
             }
         })?;
 
