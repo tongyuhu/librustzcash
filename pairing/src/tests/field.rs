@@ -199,11 +199,7 @@ fn random_negation_tests<F: Field, R: Rng>(rng: &mut R) {
 fn random_doubling_tests<F: Field, R: Rng>(rng: &mut R) {
     for _ in 0..10000 {
         let mut a = F::rand(rng);
-        let mut b = a;
-        a.add_assign(&b);
-        b.double();
-
-        assert_eq!(a, b);
+        assert_eq!(a + a, a.double());
     }
 }
 

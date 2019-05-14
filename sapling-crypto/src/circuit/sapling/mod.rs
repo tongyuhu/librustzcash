@@ -283,7 +283,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for Spend<'a, E> {
                     bit,
                     coeff
                 );
-                coeff.double();
+                coeff = coeff.double();
             }
 
             // Place the value in the note

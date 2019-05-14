@@ -22,7 +22,7 @@ pub fn pack_into_inputs<E, CS>(
         for bit in bits {
             num = num.add_bool_with_coeff(CS::one(), bit, coeff);
 
-            coeff.double();
+            coeff = coeff.double();
         }
 
         let input = cs.alloc_input(|| format!("input {}", i), || {
@@ -71,7 +71,7 @@ pub fn compute_multipacking<E: Engine>(
                 cur.add_assign(&coeff);
             }
 
-            coeff.double();
+            coeff = coeff.double();
         }
 
         result.push(cur);
