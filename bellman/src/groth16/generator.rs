@@ -258,7 +258,7 @@ pub fn generate_parameters<E, C>(
                 for (i, powers_of_tau) in powers_of_tau.chunks_mut(chunk).enumerate()
                 {
                     scope.spawn(move || {
-                        let mut current_tau_power = tau.pow(&[(i*chunk) as u64]);
+                        let mut current_tau_power = tau.pow_vartime(&[(i*chunk) as u64]);
 
                         for p in powers_of_tau {
                             p.0 = current_tau_power;

@@ -165,7 +165,7 @@ impl<E: Engine> TestConstraintSystem<E> {
         let negone = E::Fr::one().neg();
 
         let powers_of_two = (0..E::Fr::NUM_BITS).map(|i| {
-            E::Fr::from_str("2").unwrap().pow(&[i as u64])
+            E::Fr::from_str("2").unwrap().pow_vartime(&[i as u64])
         }).collect::<Vec<_>>();
 
         let pp = |s: &mut String, lc: &LinearCombination<E>| {

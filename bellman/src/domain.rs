@@ -104,7 +104,7 @@ impl<E: ScalarEngine, G: Group<E>> EvaluationDomain<E, G> {
         worker.scope(self.coeffs.len(), |scope, chunk| {
             for (i, v) in self.coeffs.chunks_mut(chunk).enumerate() {
                 scope.spawn(move || {
-                    let mut u = g.pow(&[(i * chunk) as u64]);
+                    let mut u = g.pow_vartime(&[(i * chunk) as u64]);
                     for v in v.iter_mut() {
                         v.group_mul_assign(&u);
                         u.mul_assign(&g);
@@ -131,7 +131,7 @@ impl<E: ScalarEngine, G: Group<E>> EvaluationDomain<E, G> {
     /// This evaluates t(tau) for this domain, which is
     /// tau^m - 1 for these radix-2 domains.
     pub fn z(&self, tau: &E::Fr) -> E::Fr {
-        let mut tmp = tau.pow(&[self.coeffs.len() as u64]);
+        let mut tmp = tau.pow_vartime(&[self.coeffs.len() as u64]);
         tmp.sub_assign(&E::Fr::one());
 
         tmp
@@ -289,7 +289,7 @@ fn serial_fft<E: ScalarEngine, T: Group<E>>(a: &mut [T], omega: &E::Fr, log_n: u
 
     let mut m = 1;
     for _ in 0..log_n {
-        let w_m = omega.pow(&[(n / (2*m)) as u64]);
+        let w_m = omega.pow_vartime(&[(n / (2*m)) as u64]);
 
         let mut k = 0;
         while k < n {
@@ -324,7 +324,7 @@ fn parallel_fft<E: ScalarEngine, T: Group<E>>(
     let num_cpus = 1 << log_cpus;
     let log_new_n = log_n - log_cpus;
     let mut tmp = vec![vec![T::group_zero(); 1 << log_new_n]; num_cpus];
-    let new_omega = omega.pow(&[num_cpus as u64]);
+    let new_omega = omega.pow_vartime(&[num_cpus as u64]);
 
     worker.scope(0, |scope, _| {
         let a = &*a;
@@ -332,8 +332,8 @@ fn parallel_fft<E: ScalarEngine, T: Group<E>>(
         for (j, tmp) in tmp.iter_mut().enumerate() {
             scope.spawn(move || {
                 // Shuffle into a sub-FFT
-                let omega_j = omega.pow(&[j as u64]);
-                let omega_step = omega.pow(&[(j as u64) << log_new_n]);
+                let omega_j = omega.pow_vartime(&[j as u64]);
+                let omega_step = omega.pow_vartime(&[(j as u64) << log_new_n]);
 
                 let mut elt = E::Fr::one();
                 for i in 0..(1 << log_new_n) {
