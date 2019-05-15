@@ -2037,8 +2037,9 @@ fn test_fq_sqrt() {
         // Ensure sqrt(a)^2 = a for random a
         let a = Fq::rand(&mut rng);
 
-        if let Some(mut tmp) = a.sqrt() {
-            assert_eq!(a, tmp.square());
+        let tmp = a.sqrt();
+        if tmp.is_some().into() {
+            assert_eq!(a, tmp.unwrap().square());
         }
     }
 }
@@ -2166,7 +2167,7 @@ fn test_fq_root_of_unity() {
         Fq::root_of_unity()
     );
     assert_eq!(Fq::root_of_unity().pow([1 << Fq::S]), Fq::one());
-    assert!(Fq::multiplicative_generator().sqrt().is_none());
+    assert!(bool::from(Fq::multiplicative_generator().sqrt().is_none()));
 }
 
 #[test]
@@ -2191,41 +2192,4 @@ fn test_fq_ordering() {
 #[test]
 fn fq_repr_tests() {
     ::tests::repr::random_repr_tests::<FqRepr>();
-}
-
-#[test]
-fn test_fq_legendre() {
-    use ff::LegendreSymbol::*;
-    use ff::SqrtField;
-
-    assert_eq!(QuadraticResidue, Fq::one().legendre());
-    assert_eq!(Zero, Fq::zero().legendre());
-
-    assert_eq!(
-        QuadraticNonResidue,
-        Fq::from_repr(FqRepr::from(2)).unwrap().legendre()
-    );
-    assert_eq!(
-        QuadraticResidue,
-        Fq::from_repr(FqRepr::from(4)).unwrap().legendre()
-    );
-
-    let e = FqRepr([
-        0x52a112f249778642,
-        0xd0bedb989b7991f,
-        0xdad3b6681aa63c05,
-        0xf2efc0bb4721b283,
-        0x6057a98f18c24733,
-        0x1022c2fd122889e4,
-    ]);
-    assert_eq!(QuadraticNonResidue, Fq::from_repr(e).unwrap().legendre());
-    let e = FqRepr([
-        0x6dae594e53a96c74,
-        0x19b16ca9ba64b37b,
-        0x5c764661a59bfc68,
-        0xaa346e9b31c60a,
-        0x346059f9d87a9fa9,
-        0x1d61ac6bfd5c88b,
-    ]);
-    assert_eq!(QuadraticResidue, Fq::from_repr(e).unwrap().legendre());
 }

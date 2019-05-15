@@ -97,7 +97,7 @@ macro_rules! curve_impl {
             ///
             /// If and only if `greatest` is set will the lexicographically
             /// largest y-coordinate be selected.
-            fn get_point_from_x(x: $basefield, greatest: bool) -> Option<$affine> {
+            fn get_point_from_x(x: $basefield, greatest: bool) -> CtOption<$affine> {
                 // Compute x^3 + b
                 let mut x3b = x.square();
                 x3b.mul_assign(&x);
@@ -200,8 +200,9 @@ macro_rules! curve_impl {
                     let x = rng.gen();
                     let greatest = rng.gen();
 
-                    if let Some(p) = $affine::get_point_from_x(x, greatest) {
-                        let p = p.scale_by_cofactor();
+                    let p = $affine::get_point_from_x(x, greatest);
+                    if p.is_some().into() {
+                        let p = p.unwrap().scale_by_cofactor();
 
                         if !p.is_zero() {
                             return p;
@@ -607,6 +608,8 @@ pub mod g1 {
     use rand::{Rand, Rng};
     use std::fmt;
     use std::ops::{AddAssign, MulAssign, Neg, SubAssign};
+    use subtle::CtOption;
+
     use {Engine, PairingCurveAffine};
 
     curve_impl!(
@@ -812,7 +815,12 @@ pub mod g1 {
                 let x = Fq::from_repr(x)
                     .map_err(|e| GroupDecodingError::CoordinateDecodingError("x coordinate", e))?;
 
-                G1Affine::get_point_from_x(x, greatest).ok_or(GroupDecodingError::NotOnCurve)
+                let ret = G1Affine::get_point_from_x(x, greatest);
+                if ret.is_some().into() {
+                    Ok(ret.unwrap())
+                } else {
+                    Err(GroupDecodingError::NotOnCurve)
+                }
             }
         }
         fn from_affine(affine: G1Affine) -> Self {
@@ -924,7 +932,9 @@ pub mod g1 {
             rhs.mul_assign(&x);
             rhs.add_assign(&G1Affine::get_coeff_b());
 
-            if let Some(y) = rhs.sqrt() {
+            let y = rhs.sqrt();
+            if y.is_some().into() {
+                let y = y.unwrap();
                 let yrepr = y.into_repr();
                 let negy = y.neg();
                 let negyrepr = negy.into_repr();
@@ -1252,6 +1262,8 @@ pub mod g2 {
     use rand::{Rand, Rng};
     use std::fmt;
     use std::ops::{AddAssign, MulAssign, Neg, SubAssign};
+    use subtle::CtOption;
+
     use {Engine, PairingCurveAffine};
 
     curve_impl!(
@@ -1481,7 +1493,12 @@ pub mod g2 {
                     })?,
                 };
 
-                G2Affine::get_point_from_x(x, greatest).ok_or(GroupDecodingError::NotOnCurve)
+                let ret = G2Affine::get_point_from_x(x, greatest);
+                if ret.is_some().into() {
+                    Ok(ret.unwrap())
+                } else {
+                    Err(GroupDecodingError::NotOnCurve)
+                }
             }
         }
         fn from_affine(affine: G2Affine) -> Self {
@@ -1606,7 +1623,9 @@ pub mod g2 {
             rhs.mul_assign(&x);
             rhs.add_assign(&G2Affine::get_coeff_b());
 
-            if let Some(y) = rhs.sqrt() {
+            let y = rhs.sqrt();
+            if y.is_some().into() {
+                let y = y.unwrap();
                 let negy = y.neg();
 
                 let p = G2Affine {

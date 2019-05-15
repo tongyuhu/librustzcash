@@ -1,11 +1,10 @@
 use byteorder::{ByteOrder, LittleEndian};
 use ff::{
     adc, mac_with_carry, sbb, BitIterator, Field,
-    LegendreSymbol::{self, *},
     PrimeField, PrimeFieldDecodingError, PrimeFieldRepr, SqrtField,
 };
 use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
-use subtle::{Choice, ConditionallySelectable, CtOption};
+use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 
 use super::ToUniform;
 
@@ -238,6 +237,15 @@ pub struct Fs(FsRepr);
 impl Default for Fs {
     fn default() -> Self {
         Fs::zero()
+    }
+}
+
+impl ConstantTimeEq for Fs {
+    fn ct_eq(&self, other: &Fs) -> Choice {
+        (self.0).0[0].ct_eq(&(other.0).0[0])
+            & (self.0).0[1].ct_eq(&(other.0).0[1])
+            & (self.0).0[2].ct_eq(&(other.0).0[2])
+            & (self.0).0[3].ct_eq(&(other.0).0[3])
     }
 }
 
@@ -701,16 +709,7 @@ impl ToUniform for Fs {
 }
 
 impl SqrtField for Fs {
-
-    fn legendre(&self) -> LegendreSymbol {
-        // s = self^((s - 1) // 2)
-        let s = self.pow([0x684b872f6b7b965b, 0x53341049e6640841, 0x83339d80809a1d80, 0x73eda753299d7d4]);
-        if s == Self::zero() { Zero }
-        else if s == Self::one() { QuadraticResidue }
-        else { QuadraticNonResidue }
-    }
-
-    fn sqrt(&self) -> Option<Self> {
+    fn sqrt(&self) -> CtOption<Self> {
         // Shank's algorithm for s mod 4 = 3
         // https://eprint.iacr.org/2012/685.pdf (page 9, algorithm 2)
 
@@ -718,16 +717,9 @@ impl SqrtField for Fs {
         let mut a1 = self.pow([0xb425c397b5bdcb2d, 0x299a0824f3320420, 0x4199cec0404d0ec0, 0x39f6d3a994cebea]);
         let mut a0 = a1.square();
         a0.mul_assign(self);
+        a1.mul_assign(self);
 
-        if a0 == NEGATIVE_ONE
-        {
-            None
-        }
-        else
-        {
-            a1.mul_assign(self);
-            Some(a1)
-        }
+        CtOption::new(a1, !a0.ct_eq(&NEGATIVE_ONE))
     }
 }
 
@@ -909,17 +901,6 @@ fn test_fs_repr_sub_noborrow() {
 
         assert_eq!(csub_ab, csub_ba);
     }
-}
-
-#[test]
-fn test_fs_legendre() {
-    assert_eq!(QuadraticResidue, Fs::one().legendre());
-    assert_eq!(Zero, Fs::zero().legendre());
-
-    let e = FsRepr([0x8385eec23df1f88e, 0x9a01fb412b2dba16, 0x4c928edcdd6c22f, 0x9f2df7ef69ecef9]);
-    assert_eq!(QuadraticResidue, Fs::from_repr(e).unwrap().legendre());
-    let e = FsRepr([0xe8ed9f299da78568, 0x35efdebc88b2209, 0xc82125cb1f916dbe, 0x6813d2b38c39bd0]);
-    assert_eq!(QuadraticNonResidue, Fs::from_repr(e).unwrap().legendre());
 }
 
 #[test]
@@ -1247,8 +1228,9 @@ fn test_fs_sqrt() {
         // Ensure sqrt(a)^2 = a for random a
         let a = Fs::rand(&mut rng);
 
-        if let Some(mut tmp) = a.sqrt() {
-            assert_eq!(a, tmp.square());
+        let tmp = a.sqrt();
+        if tmp.is_some().into() {
+            assert_eq!(a, tmp.unwrap().square());
         }
     }
 }
@@ -1337,5 +1319,5 @@ fn test_fs_root_of_unity() {
         Fs::root_of_unity().pow([1 << Fs::S]),
         Fs::one()
     );
-    assert!(Fs::multiplicative_generator().sqrt().is_none());
+    assert!(bool::from(Fs::multiplicative_generator().sqrt().is_none()));
 }

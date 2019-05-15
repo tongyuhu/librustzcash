@@ -275,30 +275,6 @@ fn test_fr_repr_sub_noborrow() {
 }
 
 #[test]
-fn test_fr_legendre() {
-    use ff::LegendreSymbol::*;
-    use ff::SqrtField;
-
-    assert_eq!(QuadraticResidue, Fr::one().legendre());
-    assert_eq!(Zero, Fr::zero().legendre());
-
-    let e = FrRepr([
-        0x0dbc5349cd5664da,
-        0x8ac5b6296e3ae29d,
-        0x127cb819feceaa3b,
-        0x3a6b21fb03867191,
-    ]);
-    assert_eq!(QuadraticResidue, Fr::from_repr(e).unwrap().legendre());
-    let e = FrRepr([
-        0x96341aefd047c045,
-        0x9b5f4254500a4d65,
-        0x1ee08223b68ac240,
-        0x31d9cd545c0ec7c6,
-    ]);
-    assert_eq!(QuadraticNonResidue, Fr::from_repr(e).unwrap().legendre());
-}
-
-#[test]
 fn test_fr_repr_add_nocarry() {
     let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
@@ -797,8 +773,9 @@ fn test_fr_sqrt() {
         // Ensure sqrt(a)^2 = a for random a
         let a = Fr::rand(&mut rng);
 
-        if let Some(mut tmp) = a.sqrt() {
-            assert_eq!(a, tmp.square());
+        let tmp = a.sqrt();
+        if tmp.is_some().into() {
+            assert_eq!(a, tmp.unwrap().square());
         }
     }
 }
@@ -956,7 +933,7 @@ fn test_fr_root_of_unity() {
         Fr::root_of_unity()
     );
     assert_eq!(Fr::root_of_unity().pow([1 << Fr::S]), Fr::one());
-    assert!(Fr::multiplicative_generator().sqrt().is_none());
+    assert!(bool::from(Fr::multiplicative_generator().sqrt().is_none()));
 }
 
 #[test]

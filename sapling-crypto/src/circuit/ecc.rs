@@ -1112,8 +1112,9 @@ mod test {
                 let x: Fr = rng.gen();
                 let s: bool = rng.gen();
 
-                if let Some(p) = montgomery::Point::<Bls12, _>::get_for_x(x, s, params) {
-                    break p;
+                let p = montgomery::Point::<Bls12, _>::get_for_x(x, s, params);
+                if p.is_some().into() {
+                    break p.unwrap();
                 }
             };
 
@@ -1121,8 +1122,9 @@ mod test {
                 let x: Fr = rng.gen();
                 let s: bool = rng.gen();
 
-                if let Some(p) = montgomery::Point::<Bls12, _>::get_for_x(x, s, params) {
-                    break p;
+                let p = montgomery::Point::<Bls12, _>::get_for_x(x, s, params);
+                if p.is_some().into() {
+                    break p.unwrap();
                 }
             };
 
