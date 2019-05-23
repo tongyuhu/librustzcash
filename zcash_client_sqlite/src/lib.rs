@@ -1192,7 +1192,7 @@ mod tests {
 
     /// Create a fake CompactBlock at the given height, containing a single output paying
     /// the given address. Returns the CompactBlock and the nullifier for the new note.
-    fn fake_compact_block(
+    pub(crate) fn fake_compact_block(
         height: i32,
         prev_hash: BlockHash,
         extfvk: ExtendedFullViewingKey,
@@ -1317,7 +1317,7 @@ mod tests {
     }
 
     /// Insert a fake CompactBlock into the cache DB.
-    fn insert_into_cache<P: AsRef<Path>>(db_cache: P, cb: &CompactBlock) {
+    pub(crate) fn insert_into_cache<P: AsRef<Path>>(db_cache: P, cb: &CompactBlock) {
         let cb_bytes = cb.write_to_bytes().unwrap();
         let cache = Connection::open(&db_cache).unwrap();
         cache

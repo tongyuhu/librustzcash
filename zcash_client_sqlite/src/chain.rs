@@ -91,12 +91,12 @@ pub fn validate_combined_chain<P: AsRef<Path>, Q: AsRef<Path>>(
 
     // Recall where we synced up to previously.
     // If we have never synced, use Sapling activation height to select all cached CompactBlocks.
-    let last_scanned_height = data.query_row(
+    let (have_scanned, last_scanned_height) = data.query_row(
         "SELECT MAX(height) FROM blocks",
         NO_PARAMS,
         |row| match row.get_checked(0) {
-            Ok(h) => h,
-            Err(_) => SAPLING_ACTIVATION_HEIGHT - 1,
+            Ok(h) => (true, h),
+            Err(_) => (false, SAPLING_ACTIVATION_HEIGHT - 1),
         },
     )?;
 
@@ -145,17 +145,19 @@ pub fn validate_combined_chain<P: AsRef<Path>, Q: AsRef<Path>>(
         last_prev_hash = block.prev_hash();
     }
 
-    // Cached blocks MUST hash-chain to the last scanned block.
-    let last_scanned_hash = data.query_row(
-        "SELECT hash FROM blocks WHERE height = ?",
-        &[last_scanned_height],
-        |row| row.get_checked::<_, Vec<_>>(0),
-    )??;
-    if &last_scanned_hash[..] != &last_prev_hash.0[..] {
-        return Err(Error(ErrorKind::InvalidChain(
-            last_scanned_height,
-            ChainInvalidCause::PrevHashMismatch,
-        )));
+    if have_scanned {
+        // Cached blocks MUST hash-chain to the last scanned block.
+        let last_scanned_hash = data.query_row(
+            "SELECT hash FROM blocks WHERE height = ?",
+            &[last_scanned_height],
+            |row| row.get_checked::<_, Vec<_>>(0),
+        )??;
+        if &last_scanned_hash[..] != &last_prev_hash.0[..] {
+            return Err(Error(ErrorKind::InvalidChain(
+                last_scanned_height,
+                ChainInvalidCause::PrevHashMismatch,
+            )));
+        }
     }
 
     // All good!
@@ -204,4 +206,202 @@ pub fn rewind_to_height<P: AsRef<Path>>(db_data: P, height: i32) -> Result<(), E
     data.execute("COMMIT", NO_PARAMS)?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use tempfile::NamedTempFile;
+    use zcash_primitives::{
+        block::BlockHash,
+        transaction::components::Amount,
+        zip32::{ExtendedFullViewingKey, ExtendedSpendingKey},
+    };
+
+    use super::validate_combined_chain;
+    use crate::{
+        init_accounts_table, init_cache_database, init_data_database, scan_cached_blocks,
+        tests::{fake_compact_block, insert_into_cache},
+        ErrorKind, SAPLING_ACTIVATION_HEIGHT,
+    };
+
+    #[test]
+    fn valid_chain_states() {
+        let cache_file = NamedTempFile::new().unwrap();
+        let db_cache = cache_file.path();
+        init_cache_database(&db_cache).unwrap();
+
+        let data_file = NamedTempFile::new().unwrap();
+        let db_data = data_file.path();
+        init_data_database(&db_data).unwrap();
+
+        // Add an account to the wallet
+        let extsk = ExtendedSpendingKey::master(&[]);
+        let extfvk = ExtendedFullViewingKey::from(&extsk);
+        init_accounts_table(&db_data, &[extfvk.clone()]).unwrap();
+
+        // Empty chain should be valid
+        validate_combined_chain(db_cache, db_data).unwrap();
+
+        // Create a fake CompactBlock sending value to the address
+        let (cb, _) = fake_compact_block(
+            SAPLING_ACTIVATION_HEIGHT,
+            BlockHash([0; 32]),
+            extfvk.clone(),
+            Amount(5),
+        );
+        insert_into_cache(db_cache, &cb);
+
+        // Cache-only chain should be valid
+        validate_combined_chain(db_cache, db_data).unwrap();
+
+        // Scan the cache
+        scan_cached_blocks(db_cache, db_data).unwrap();
+
+        // Data-only chain should be valid
+        validate_combined_chain(db_cache, db_data).unwrap();
+
+        // Create a second fake CompactBlock sending more value to the address
+        let (cb2, _) =
+            fake_compact_block(SAPLING_ACTIVATION_HEIGHT + 1, cb.hash(), extfvk, Amount(7));
+        insert_into_cache(db_cache, &cb2);
+
+        // Data+cache chain should be valid
+        validate_combined_chain(db_cache, db_data).unwrap();
+
+        // Scan the cache again
+        scan_cached_blocks(db_cache, db_data).unwrap();
+
+        // Data-only chain should be valid
+        validate_combined_chain(db_cache, db_data).unwrap();
+    }
+
+    #[test]
+    fn invalid_chain_cache_disconnected() {
+        let cache_file = NamedTempFile::new().unwrap();
+        let db_cache = cache_file.path();
+        init_cache_database(&db_cache).unwrap();
+
+        let data_file = NamedTempFile::new().unwrap();
+        let db_data = data_file.path();
+        init_data_database(&db_data).unwrap();
+
+        // Add an account to the wallet
+        let extsk = ExtendedSpendingKey::master(&[]);
+        let extfvk = ExtendedFullViewingKey::from(&extsk);
+        init_accounts_table(&db_data, &[extfvk.clone()]).unwrap();
+
+        // Create some fake CompactBlocks
+        let (cb, _) = fake_compact_block(
+            SAPLING_ACTIVATION_HEIGHT,
+            BlockHash([0; 32]),
+            extfvk.clone(),
+            Amount(5),
+        );
+        let (cb2, _) = fake_compact_block(
+            SAPLING_ACTIVATION_HEIGHT + 1,
+            cb.hash(),
+            extfvk.clone(),
+            Amount(7),
+        );
+        insert_into_cache(db_cache, &cb);
+        insert_into_cache(db_cache, &cb2);
+
+        // Scan the cache
+        scan_cached_blocks(db_cache, db_data).unwrap();
+
+        // Data-only chain should be valid
+        validate_combined_chain(db_cache, db_data).unwrap();
+
+        // Create more fake CompactBlocks that don't connect to the scanned ones
+        let (cb3, _) = fake_compact_block(
+            SAPLING_ACTIVATION_HEIGHT + 2,
+            BlockHash([1; 32]),
+            extfvk.clone(),
+            Amount(8),
+        );
+        let (cb4, _) = fake_compact_block(
+            SAPLING_ACTIVATION_HEIGHT + 3,
+            cb3.hash(),
+            extfvk.clone(),
+            Amount(3),
+        );
+        insert_into_cache(db_cache, &cb3);
+        insert_into_cache(db_cache, &cb4);
+
+        // Data+cache chain should be invalid at the data/cache boundary
+        match validate_combined_chain(db_cache, db_data) {
+            Err(e) => match e.kind() {
+                ErrorKind::InvalidChain(upper_bound, _) => {
+                    assert_eq!(*upper_bound, SAPLING_ACTIVATION_HEIGHT + 1)
+                }
+                _ => panic!(),
+            },
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn invalid_chain_cache_reorg() {
+        let cache_file = NamedTempFile::new().unwrap();
+        let db_cache = cache_file.path();
+        init_cache_database(&db_cache).unwrap();
+
+        let data_file = NamedTempFile::new().unwrap();
+        let db_data = data_file.path();
+        init_data_database(&db_data).unwrap();
+
+        // Add an account to the wallet
+        let extsk = ExtendedSpendingKey::master(&[]);
+        let extfvk = ExtendedFullViewingKey::from(&extsk);
+        init_accounts_table(&db_data, &[extfvk.clone()]).unwrap();
+
+        // Create some fake CompactBlocks
+        let (cb, _) = fake_compact_block(
+            SAPLING_ACTIVATION_HEIGHT,
+            BlockHash([0; 32]),
+            extfvk.clone(),
+            Amount(5),
+        );
+        let (cb2, _) = fake_compact_block(
+            SAPLING_ACTIVATION_HEIGHT + 1,
+            cb.hash(),
+            extfvk.clone(),
+            Amount(7),
+        );
+        insert_into_cache(db_cache, &cb);
+        insert_into_cache(db_cache, &cb2);
+
+        // Scan the cache
+        scan_cached_blocks(db_cache, db_data).unwrap();
+
+        // Data-only chain should be valid
+        validate_combined_chain(db_cache, db_data).unwrap();
+
+        // Create more fake CompactBlocks that contain a reorg
+        let (cb3, _) = fake_compact_block(
+            SAPLING_ACTIVATION_HEIGHT + 2,
+            cb2.hash(),
+            extfvk.clone(),
+            Amount(8),
+        );
+        let (cb4, _) = fake_compact_block(
+            SAPLING_ACTIVATION_HEIGHT + 3,
+            BlockHash([1; 32]),
+            extfvk.clone(),
+            Amount(3),
+        );
+        insert_into_cache(db_cache, &cb3);
+        insert_into_cache(db_cache, &cb4);
+
+        // Data+cache chain should be invalid inside the cache
+        match validate_combined_chain(db_cache, db_data) {
+            Err(e) => match e.kind() {
+                ErrorKind::InvalidChain(upper_bound, _) => {
+                    assert_eq!(*upper_bound, SAPLING_ACTIVATION_HEIGHT + 2)
+                }
+                _ => panic!(),
+            },
+            _ => panic!(),
+        }
+    }
 }
