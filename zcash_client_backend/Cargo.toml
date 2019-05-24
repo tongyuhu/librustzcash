@@ -8,6 +8,7 @@ edition = "2018"
 
 [dependencies]
 bech32 = "0.6"
+bs58 = { version = "0.2", features = ["check"] }
 ff = { path = "../ff" }
 hex = "0.3"
 pairing = { path = "../pairing" }
