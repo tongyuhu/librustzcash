@@ -4,13 +4,13 @@ use ff::{PrimeField, PrimeFieldRepr};
 use pairing::bls12_381::Bls12;
 use rusqlite::{types::ToSql, Connection, NO_PARAMS};
 use std::path::Path;
-use zcash_client_backend::encoding::{encode_extended_full_viewing_key, encode_payment_address};
+use zcash_client_backend::encoding::encode_extended_full_viewing_key;
 use zcash_primitives::{
     consensus,
     jubjub::fs::{Fs, FsRepr},
     merkle_tree::IncrementalWitness,
     note_encryption::Memo,
-    primitives::{Diversifier, Note, PaymentAddress},
+    primitives::{Diversifier, Note},
     prover::TxProver,
     sapling::Node,
     transaction::{
@@ -22,9 +22,9 @@ use zcash_primitives::{
 };
 
 use crate::{
+    address::RecipientAddress,
     error::{Error, ErrorKind},
     get_target_and_anchor_heights, HRP_SAPLING_EXTENDED_FULL_VIEWING_KEY,
-    HRP_SAPLING_PAYMENT_ADDRESS,
 };
 
 struct SelectedNoteRow {
@@ -62,7 +62,7 @@ struct SelectedNoteRow {
 ///
 /// let account = 0;
 /// let extsk = spending_key(&[0; 32][..], COIN_TYPE, account);
-/// let to = extsk.default_address().unwrap().1;
+/// let to = extsk.default_address().unwrap().1.into();
 /// match create_to_address(
 ///     "/path/to/data.db",
 ///     consensus::BranchId::Sapling,
@@ -81,7 +81,7 @@ pub fn create_to_address<P: AsRef<Path>>(
     consensus_branch_id: consensus::BranchId,
     prover: impl TxProver,
     (account, extsk): (u32, &ExtendedSpendingKey),
-    to: &PaymentAddress<Bls12>,
+    to: &RecipientAddress,
     value: Amount,
     memo: Option<Memo>,
 ) -> Result<i64, Error> {
@@ -222,7 +222,12 @@ pub fn create_to_address<P: AsRef<Path>>(
             selected.witness,
         )?;
     }
-    builder.add_sapling_output(ovk, to.clone(), value, memo.clone())?;
+    match to {
+        RecipientAddress::Shielded(to) => {
+            builder.add_sapling_output(ovk, to.clone(), value, memo.clone())
+        }
+        RecipientAddress::Transparent(to) => builder.add_transparent_output(&to, value),
+    }?;
     let (tx, tx_metadata) = builder.build(consensus_branch_id, prover)?;
     // We only called add_sapling_output() once.
     let output_index = match tx_metadata.output_index(0) {
@@ -264,7 +269,8 @@ pub fn create_to_address<P: AsRef<Path>>(
     }
 
     // Save the sent note in the database.
-    let to_str = encode_payment_address(HRP_SAPLING_PAYMENT_ADDRESS, to);
+    // TODO: Decide how to save transparent output information.
+    let to_str = to.to_string();
     if let Some(memo) = memo {
         let mut stmt_insert_sent_note = data.prepare(
             "INSERT INTO sent_notes (tx, output_index, from_account, address, value, memo)
@@ -342,7 +348,7 @@ mod tests {
             ExtendedFullViewingKey::from(&extsk1),
         ];
         init_accounts_table(&db_data, &extfvks).unwrap();
-        let to = extsk0.default_address().unwrap().1;
+        let to = extsk0.default_address().unwrap().1.into();
 
         // Invalid extsk for the given account should cause an error
         match create_to_address(
@@ -381,7 +387,7 @@ mod tests {
         let extsk = ExtendedSpendingKey::master(&[]);
         let extfvks = [ExtendedFullViewingKey::from(&extsk)];
         init_accounts_table(&db_data, &extfvks).unwrap();
-        let to = extsk.default_address().unwrap().1;
+        let to = extsk.default_address().unwrap().1.into();
 
         // We cannot do anything if we aren't synchronised
         match create_to_address(
@@ -409,7 +415,7 @@ mod tests {
         let extsk = ExtendedSpendingKey::master(&[]);
         let extfvks = [ExtendedFullViewingKey::from(&extsk)];
         init_accounts_table(&db_data, &extfvks).unwrap();
-        let to = extsk.default_address().unwrap().1;
+        let to = extsk.default_address().unwrap().1.into();
 
         // Account balance should be zero
         assert_eq!(get_balance(db_data, 0).unwrap(), Amount::zero());
@@ -478,7 +484,7 @@ mod tests {
 
         // Spend fails because there are insufficient verified notes
         let extsk2 = ExtendedSpendingKey::master(&[]);
-        let to = extsk2.default_address().unwrap().1;
+        let to = extsk2.default_address().unwrap().1.into();
         match create_to_address(
             db_data,
             consensus::BranchId::Blossom,
@@ -577,7 +583,7 @@ mod tests {
 
         // Send some of the funds to another address
         let extsk2 = ExtendedSpendingKey::master(&[]);
-        let to = extsk2.default_address().unwrap().1;
+        let to = extsk2.default_address().unwrap().1.into();
         create_to_address(
             db_data,
             consensus::BranchId::Blossom,
