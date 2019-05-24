@@ -217,9 +217,10 @@ mod tests {
         zip32::{ExtendedFullViewingKey, ExtendedSpendingKey},
     };
 
-    use super::validate_combined_chain;
+    use super::{rewind_to_height, validate_combined_chain};
     use crate::{
-        init_accounts_table, init_cache_database, init_data_database, scan_cached_blocks,
+        get_balance, init_accounts_table, init_cache_database, init_data_database,
+        scan_cached_blocks,
         tests::{fake_compact_block, insert_into_cache},
         ErrorKind, SAPLING_ACTIVATION_HEIGHT,
     };
@@ -403,5 +404,55 @@ mod tests {
             },
             _ => panic!(),
         }
+    }
+
+    #[test]
+    fn data_db_rewinding() {
+        let cache_file = NamedTempFile::new().unwrap();
+        let db_cache = cache_file.path();
+        init_cache_database(&db_cache).unwrap();
+
+        let data_file = NamedTempFile::new().unwrap();
+        let db_data = data_file.path();
+        init_data_database(&db_data).unwrap();
+
+        // Add an account to the wallet
+        let extsk = ExtendedSpendingKey::master(&[]);
+        let extfvk = ExtendedFullViewingKey::from(&extsk);
+        init_accounts_table(&db_data, &[extfvk.clone()]).unwrap();
+
+        // Account balance should be zero
+        assert_eq!(get_balance(db_data, 0).unwrap(), Amount(0));
+
+        // Create fake CompactBlocks sending value to the address
+        let value = Amount(5);
+        let value2 = Amount(7);
+        let (cb, _) = fake_compact_block(
+            SAPLING_ACTIVATION_HEIGHT,
+            BlockHash([0; 32]),
+            extfvk.clone(),
+            value,
+        );
+        let (cb2, _) = fake_compact_block(SAPLING_ACTIVATION_HEIGHT + 1, cb.hash(), extfvk, value2);
+        insert_into_cache(db_cache, &cb);
+        insert_into_cache(db_cache, &cb2);
+
+        // Scan the cache
+        scan_cached_blocks(db_cache, db_data).unwrap();
+
+        // Account balance should reflect both received notes
+        assert_eq!(get_balance(db_data, 0).unwrap(), Amount(value.0 + value2.0));
+
+        // "Rewind" to height of last scanned block
+        rewind_to_height(db_data, SAPLING_ACTIVATION_HEIGHT + 1).unwrap();
+
+        // Account balance should be unaltered
+        assert_eq!(get_balance(db_data, 0).unwrap(), Amount(value.0 + value2.0));
+
+        // Rewind so that one block is dropped
+        rewind_to_height(db_data, SAPLING_ACTIVATION_HEIGHT).unwrap();
+
+        // Account balance should only contain the first received note
+        assert_eq!(get_balance(db_data, 0).unwrap(), value);
     }
 }

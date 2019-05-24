@@ -458,7 +458,8 @@ pub fn get_address<P: AsRef<Path>>(db_data: P, account: u32) -> Result<String, E
     Ok(addr)
 }
 
-/// Returns the balance for the account, including all unspent notes that we know about.
+/// Returns the balance for the account, including all mined unspent notes that we know
+/// about.
 ///
 /// # Examples
 ///
@@ -472,7 +473,8 @@ pub fn get_balance<P: AsRef<Path>>(db_data: P, account: u32) -> Result<Amount, E
 
     let balance = data.query_row(
         "SELECT SUM(value) FROM received_notes
-        WHERE account = ? AND spent IS NULL",
+        INNER JOIN transactions ON transactions.id_tx = received_notes.tx
+        WHERE account = ? AND spent IS NULL AND transactions.block IS NOT NULL",
         &[account],
         |row| row.get_checked(0).unwrap_or(0),
     )?;
