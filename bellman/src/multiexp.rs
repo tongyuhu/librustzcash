@@ -5,6 +5,8 @@ use std::io;
 use bit_vec::{self, BitVec};
 use std::iter;
 use futures::{Future};
+use std::ops::AddAssign;
+
 use super::multicore::Worker;
 
 use super::SynthesisError;

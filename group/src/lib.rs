@@ -4,6 +4,7 @@ extern crate rand;
 use ff::{PrimeField, PrimeFieldDecodingError, ScalarEngine, SqrtField};
 use std::error::Error;
 use std::fmt;
+use std::ops::{Add, AddAssign, Sub, SubAssign};
 
 pub mod tests;
 
@@ -24,6 +25,10 @@ pub trait CurveProjective:
     + fmt::Display
     + rand::Rand
     + 'static
+    + CurveAddOps
+    + for<'r> CurveAddOps<&'r Self>
+    + CurveAddAssignOps
+    + for<'r> CurveAddAssignOps<&'r Self>
 {
     type Engine: ScalarEngine<Fr = Self::Scalar>;
     type Scalar: PrimeField + SqrtField;
@@ -49,16 +54,6 @@ pub trait CurveProjective:
 
     /// Doubles this element.
     fn double(&mut self);
-
-    /// Adds another element to this element.
-    fn add_assign(&mut self, other: &Self);
-
-    /// Subtracts another element from this element.
-    fn sub_assign(&mut self, other: &Self) {
-        let mut tmp = *other;
-        tmp.negate();
-        self.add_assign(&tmp);
-    }
 
     /// Adds an affine element to this element.
     fn add_assign_mixed(&mut self, other: &Self::Affine);
@@ -123,6 +118,37 @@ pub trait CurveAffine:
     fn into_uncompressed(&self) -> Self::Uncompressed {
         <Self::Uncompressed as EncodedPoint>::from_affine(*self)
     }
+}
+
+/// The trait for types implementing additive curve operations.
+///
+/// This is automatically implemented for types which implement the operators.
+pub trait CurveAddOps<Rhs = Self, Output = Self>:
+    Add<Rhs, Output = Output> + Sub<Rhs, Output = Output>
+{
+}
+
+impl<T, Rhs, Output> CurveAddOps<Rhs, Output> for T where
+    T: Add<Rhs, Output = Output> + Sub<Rhs, Output = Output>
+{
+}
+
+/// The trait for types implementing additive curve assignment operators
+/// (like `+=`).
+///
+/// This is automatically implemented for types which implement the operators.
+pub trait CurveAddAssignOps<Rhs = Self>: AddAssign<Rhs> + SubAssign<Rhs> {}
+
+impl<T, Rhs> CurveAddAssignOps<Rhs> for T where T: AddAssign<Rhs> + SubAssign<Rhs> {}
+
+/// The trait for references which implement additive curve operations, taking
+/// the second operand either by value or by reference.
+///
+/// This is automatically implemented for types which implement the operators.
+pub trait RefCurve<Base>: CurveAddOps<Base, Base> + for<'r> CurveAddOps<&'r Base, Base> {}
+impl<T, Base> RefCurve<Base> for T where
+    T: CurveAddOps<Base, Base> + for<'r> CurveAddOps<&'r Base, Base>
+{
 }
 
 /// An encoded elliptic curve point, which should essentially wrap a `[u8; N]`.
