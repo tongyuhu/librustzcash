@@ -3,6 +3,7 @@ members = [
     # "bellman",
     "ff",
     "group",
+    "jubjub",
     # "librustzcash",
     "pairing",
     # "zcash_client_backend",
