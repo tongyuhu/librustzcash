@@ -2,6 +2,8 @@ use core::fmt;
 use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 use byteorder::{ByteOrder, LittleEndian};
+use ff::{Field, PrimeField, SqrtField};
+use rand::{Rand, Rng};
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 
 use crate::util::{adc, mac, sbb};
@@ -15,11 +17,23 @@ pub struct Fr(pub(crate) [u64; 4]);
 
 impl fmt::Debug for Fr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let tmp = self.into_bytes();
+        let tmp = self.to_bytes();
         write!(f, "0x")?;
         for &b in tmp.iter().rev() {
             write!(f, "{:02x}", b)?;
         }
+        Ok(())
+    }
+}
+
+impl fmt::Display for Fr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let tmp = self.to_bytes();
+        write!(f, "Fr(0x")?;
+        for &b in tmp.iter().rev() {
+            write!(f, "{:02x}", b)?;
+        }
+        write!(f, ")")?;
         Ok(())
     }
 }
@@ -42,6 +56,14 @@ impl ConstantTimeEq for Fr {
 impl PartialEq for Fr {
     fn eq(&self, other: &Self) -> bool {
         self.ct_eq(other).unwrap_u8() == 1
+    }
+}
+
+impl Rand for Fr {
+    fn rand<R: Rng>(rng: &mut R) -> Self {
+        let mut bytes = [0; 64];
+        rng.fill_bytes(&mut bytes);
+        Fr::from_bytes_wide(&bytes)
     }
 }
 
@@ -170,26 +192,30 @@ impl Default for Fr {
 impl Fr {
     /// Returns zero, the additive identity.
     #[inline]
-    pub fn zero() -> Fr {
+    pub fn field_zero() -> Fr {
         Fr([0, 0, 0, 0])
     }
 
     /// Returns one, the multiplicative identity.
     #[inline]
-    pub fn one() -> Fr {
+    pub fn field_one() -> Fr {
         R
     }
 
     /// Doubles this field element.
     #[inline]
-    pub fn double(&self) -> Fr {
+    pub fn field_double(&self) -> Fr {
         self + self
     }
+}
+
+impl PrimeField for Fr {
+    type Repr = [u8; 32];
 
     /// Attempts to convert a little-endian byte representation of
     /// a field element into an element of `Fr`, failing if the input
     /// is not canonical (is not smaller than r).
-    pub fn from_bytes(bytes: &[u8; 32]) -> CtOption<Fr> {
+    fn from_bytes(bytes: &[u8; 32]) -> CtOption<Fr> {
         let mut tmp = Fr([0, 0, 0, 0]);
 
         tmp.0[0] = LittleEndian::read_u64(&bytes[0..8]);
@@ -217,7 +243,7 @@ impl Fr {
 
     /// Converts an element of `Fr` into a byte representation in
     /// little-endian byte order.
-    pub fn into_bytes(&self) -> [u8; 32] {
+    fn to_bytes(&self) -> [u8; 32] {
         // Turn into canonical form by computing
         // (a.R) / R = a
         let tmp = Fr::montgomery_reduce(self.0[0], self.0[1], self.0[2], self.0[3], 0, 0, 0, 0);
@@ -231,6 +257,48 @@ impl Fr {
         res
     }
 
+    /// Returns the field characteristic; the modulus.
+    fn char() -> Self::Repr {
+        [
+            0xb7, 0x2c, 0xf7, 0xd6, 0x5e, 0x0e, 0x97, 0xd0, 0x82, 0x10, 0xc8, 0xcc, 0x93, 0x20,
+            0x68, 0xa6, 0x00, 0x3b, 0x34, 0x01, 0x01, 0x3b, 0x67, 0x06, 0xa9, 0xaf, 0x33, 0x65,
+            0xea, 0xb4, 0x7d, 0x0e,
+        ]
+    }
+
+    /// How many bits are needed to represent an element of this field.
+    const NUM_BITS: u32 = 252;
+
+    /// How many bits of information can be reliably stored in the field element.
+    const CAPACITY: u32 = Self::NUM_BITS - 1;
+
+    /// Returns the multiplicative generator of `char()` - 1 order. This element
+    /// must also be quadratic nonresidue.
+    fn multiplicative_generator() -> Self {
+        Fr([
+            0x720b1b19d49ea8f1,
+            0xbf4aa36101f13a58,
+            0x5fa8cc968193ccbb,
+            0xe70cbdc7dccf3ac,
+        ])
+    }
+
+    /// 2^s * t = `char()` - 1 with t odd.
+    const S: u32 = 1;
+
+    /// Returns the 2^s root of unity computed by exponentiating the `multiplicative_generator()`
+    /// by t.
+    fn root_of_unity() -> Self {
+        Fr([
+            0xaa9f02ab1d6124de,
+            0xb3524a6466112932,
+            0x7342261215ac260b,
+            0x4d6b87b1da259e2,
+        ])
+    }
+}
+
+impl Fr {
     /// Converts a 512-bit little endian integer into
     /// an element of Fr by reducing modulo r.
     pub fn from_bytes_wide(bytes: &[u8; 64]) -> Fr {
@@ -274,7 +342,7 @@ impl Fr {
 
     /// Squares this element.
     #[inline]
-    pub const fn square(&self) -> Fr {
+    pub const fn field_square(&self) -> Fr {
         let (r1, carry) = mac(0, self.0[0], self.0[1], 0);
         let (r2, carry) = mac(0, self.0[0], self.0[2], carry);
         let (r3, r4) = mac(0, self.0[0], self.0[3], carry);
@@ -303,9 +371,11 @@ impl Fr {
 
         Fr::montgomery_reduce(r0, r1, r2, r3, r4, r5, r6, r7)
     }
+}
 
+impl SqrtField for Fr {
     /// Computes the square root of this element, if it exists.
-    pub fn sqrt(&self) -> CtOption<Self> {
+    fn sqrt(&self) -> CtOption<Self> {
         // Because r = 3 (mod 4)
         // sqrt can be done with only one exponentiation,
         // via the computation of  self^((r + 1) // 4) (mod r)
@@ -321,7 +391,9 @@ impl Fr {
             (&sqrt * &sqrt).ct_eq(self), // Only return Some if it's the square root.
         )
     }
+}
 
+impl Fr {
     /// Exponentiates `self` by `by`, where `by` is a
     /// little-endian order integer exponent.
     pub fn pow(&self, by: &[u64; 4]) -> Self {
@@ -336,30 +408,40 @@ impl Fr {
         }
         res
     }
+}
 
-    /// Exponentiates `self` by `by`, where `by` is a
-    /// little-endian order integer exponent.
-    ///
-    /// **This operation is variable time with respect
-    /// to the exponent.** If the exponent is fixed,
-    /// this operation is effectively constant time.
-    pub fn pow_vartime(&self, by: &[u64; 4]) -> Self {
-        let mut res = Self::one();
-        for e in by.iter().rev() {
-            for i in (0..64).rev() {
-                res = res.square();
+impl Field for Fr {
+    /// Returns zero, the additive identity.
+    #[inline]
+    fn zero() -> Fr {
+        Fr::field_zero()
+    }
 
-                if ((*e >> i) & 1) == 1 {
-                    res.mul_assign(self);
-                }
-            }
-        }
-        res
+    /// Returns one, the multiplicative identity.
+    #[inline]
+    fn one() -> Fr {
+        Fr::field_one()
+    }
+
+    fn is_zero(&self) -> bool {
+        self.ct_eq(&Fr::zero()).into()
+    }
+
+    /// Doubles this field element.
+    #[inline]
+    fn double(&self) -> Fr {
+        self.field_double()
+    }
+
+    /// Squares this element.
+    #[inline]
+    fn square(&self) -> Fr {
+        self.field_square()
     }
 
     /// Computes the multiplicative inverse of this element,
     /// failing if the element is zero.
-    pub fn invert(&self) -> CtOption<Self> {
+    fn invert(&self) -> CtOption<Self> {
         #[inline(always)]
         fn square_assign_multi(n: &mut Fr, num_times: usize) {
             for _ in 0..num_times {
@@ -463,6 +545,13 @@ impl Fr {
         CtOption::new(t0, !self.ct_eq(&Self::zero()))
     }
 
+    #[inline(always)]
+    fn frobenius_map(&mut self, _: usize) {
+        // This has no effect in a prime field.
+    }
+}
+
+impl Fr {
     #[inline]
     const fn montgomery_reduce(
         r0: u64,
@@ -555,9 +644,15 @@ impl Fr {
     }
 }
 
+impl From<Fr> for [u8; 32] {
+    fn from(value: Fr) -> [u8; 32] {
+        value.to_bytes()
+    }
+}
+
 impl<'a> From<&'a Fr> for [u8; 32] {
     fn from(value: &'a Fr) -> [u8; 32] {
-        value.into_bytes()
+        value.to_bytes()
     }
 }
 
@@ -604,9 +699,9 @@ fn test_equality() {
 }
 
 #[test]
-fn test_into_bytes() {
+fn test_to_bytes() {
     assert_eq!(
-        Fr::zero().into_bytes(),
+        Fr::zero().to_bytes(),
         [
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0
@@ -614,7 +709,7 @@ fn test_into_bytes() {
     );
 
     assert_eq!(
-        Fr::one().into_bytes(),
+        Fr::one().to_bytes(),
         [
             1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0
@@ -622,7 +717,7 @@ fn test_into_bytes() {
     );
 
     assert_eq!(
-        R2.into_bytes(),
+        R2.to_bytes(),
         [
             217, 7, 150, 185, 179, 11, 248, 37, 80, 231, 182, 102, 47, 214, 21, 243, 244, 20, 136,
             235, 238, 20, 37, 147, 198, 85, 145, 71, 111, 252, 166, 9
@@ -630,7 +725,7 @@ fn test_into_bytes() {
     );
 
     assert_eq!(
-        (-&Fr::one()).into_bytes(),
+        (-&Fr::one()).to_bytes(),
         [
             182, 44, 247, 214, 94, 14, 151, 208, 130, 16, 200, 204, 147, 32, 104, 166, 0, 59, 52,
             1, 1, 59, 103, 6, 169, 175, 51, 101, 234, 180, 125, 14
@@ -869,7 +964,7 @@ fn test_multiplication() {
 
         let mut tmp2 = Fr::zero();
         for b in cur
-            .into_bytes()
+            .to_bytes()
             .iter()
             .rev()
             .flat_map(|byte| (0..8).rev().map(move |i| ((byte >> i) & 1u8) == 1u8))
@@ -898,7 +993,7 @@ fn test_squaring() {
 
         let mut tmp2 = Fr::zero();
         for b in cur
-            .into_bytes()
+            .to_bytes()
             .iter()
             .rev()
             .flat_map(|byte| (0..8).rev().map(move |i| ((byte >> i) & 1u8) == 1u8))

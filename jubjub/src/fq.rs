@@ -2,6 +2,8 @@ use core::fmt;
 use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 use byteorder::{ByteOrder, LittleEndian};
+use ff::{Field, PrimeField, SqrtField};
+use rand::{Rand, Rng};
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 
 use crate::util::{adc, mac, sbb};
@@ -15,7 +17,18 @@ pub struct Fq(pub(crate) [u64; 4]);
 
 impl fmt::Debug for Fq {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let tmp = self.into_bytes();
+        let tmp = self.to_bytes();
+        write!(f, "0x")?;
+        for &b in tmp.iter().rev() {
+            write!(f, "{:02x}", b)?;
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Display for Fq {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let tmp = self.to_bytes();
         write!(f, "0x")?;
         for &b in tmp.iter().rev() {
             write!(f, "{:02x}", b)?;
@@ -42,6 +55,14 @@ impl ConstantTimeEq for Fq {
 impl PartialEq for Fq {
     fn eq(&self, other: &Self) -> bool {
         self.ct_eq(other).unwrap_u8() == 1
+    }
+}
+
+impl Rand for Fq {
+    fn rand<R: Rng>(rng: &mut R) -> Self {
+        let mut bytes = [0; 64];
+        rng.fill_bytes(&mut bytes);
+        Fq::from_bytes_wide(&bytes)
     }
 }
 
@@ -152,13 +173,14 @@ const R3: Fq = Fq([
     0x6e2a5bb9c8db33e9,
 ]);
 
-// /// 7*R mod q
-// const GENERATOR: Fq = Fq([
-//     0x0000000efffffff1,
-//     0x17e363d300189c0f,
-//     0xff9c57876f8457b0,
-//     0x351332208fc5a8c4,
-// ]);
+/// 7*R mod q
+const GENERATOR: Fq = Fq([
+    0x0000000efffffff1,
+    0x17e363d300189c0f,
+    0xff9c57876f8457b0,
+    0x351332208fc5a8c4,
+]);
+
 
 const S: u32 = 32;
 
@@ -181,26 +203,30 @@ impl Default for Fq {
 impl Fq {
     /// Returns zero, the additive identity.
     #[inline]
-    pub const fn zero() -> Fq {
+    pub const fn field_zero() -> Fq {
         Fq([0, 0, 0, 0])
     }
 
     /// Returns one, the multiplicative identity.
     #[inline]
-    pub const fn one() -> Fq {
+    pub const fn field_one() -> Fq {
         R
     }
 
     /// Doubles this field element.
     #[inline]
-    pub fn double(&self) -> Fq {
+    pub fn field_double(&self) -> Fq {
         self + self
     }
+}
+
+impl PrimeField for Fq {
+    type Repr = [u8; 32];
 
     /// Attempts to convert a little-endian byte representation of
     /// a field element into an element of `Fq`, failing if the input
     /// is not canonical (is not smaller than q).
-    pub fn from_bytes(bytes: &[u8; 32]) -> CtOption<Fq> {
+    fn from_bytes(bytes: &[u8; 32]) -> CtOption<Fq> {
         let mut tmp = Fq([0, 0, 0, 0]);
 
         tmp.0[0] = LittleEndian::read_u64(&bytes[0..8]);
@@ -228,7 +254,7 @@ impl Fq {
 
     /// Converts an element of `Fq` into a byte representation in
     /// little-endian byte order.
-    pub fn into_bytes(&self) -> [u8; 32] {
+    fn to_bytes(&self) -> [u8; 32] {
         // Turn into canonical form by computing
         // (a.R) / R = a
         let tmp = Fq::montgomery_reduce(self.0[0], self.0[1], self.0[2], self.0[3], 0, 0, 0, 0);
@@ -242,6 +268,38 @@ impl Fq {
         res
     }
 
+    /// Returns the field characteristic; the modulus.
+    fn char() -> Self::Repr {
+        [
+            0x01, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xfe, 0x5b, 0xfe, 0xff, 0x02, 0xa4,
+            0xbd, 0x53, 0x05, 0xd8, 0xa1, 0x09, 0x08, 0xd8, 0x39, 0x33, 0x48, 0x7d, 0x9d, 0x29,
+            0x53, 0xa7, 0xed, 0x73,
+        ]
+    }
+
+    /// How many bits are needed to represent an element of this field.
+    const NUM_BITS: u32 = 255;
+
+    /// How many bits of information can be reliably stored in the field element.
+    const CAPACITY: u32 = Self::NUM_BITS - 1;
+
+    /// Returns the multiplicative generator of `char()` - 1 order. This element
+    /// must also be quadratic nonresidue.
+    fn multiplicative_generator() -> Self {
+        GENERATOR
+    }
+
+    /// 2^s * t = `char()` - 1 with t odd.
+    const S: u32 = S;
+
+    /// Returns the 2^s root of unity computed by exponentiating the `multiplicative_generator()`
+    /// by t.
+    fn root_of_unity() -> Self {
+        ROOT_OF_UNITY
+    }
+}
+
+impl Fq {
     /// Converts a 512-bit little endian integer into
     /// an element of Fq by reducing modulo q.
     pub fn from_bytes_wide(bytes: &[u8; 64]) -> Fq {
@@ -285,7 +343,7 @@ impl Fq {
 
     /// Squares this element.
     #[inline]
-    pub const fn square(&self) -> Fq {
+    pub const fn field_square(&self) -> Fq {
         let (r1, carry) = mac(0, self.0[0], self.0[1], 0);
         let (r2, carry) = mac(0, self.0[0], self.0[2], carry);
         let (r3, r4) = mac(0, self.0[0], self.0[3], carry);
@@ -314,9 +372,11 @@ impl Fq {
 
         Fq::montgomery_reduce(r0, r1, r2, r3, r4, r5, r6, r7)
     }
+}
 
+impl SqrtField for Fq {
     /// Computes the square root of this element, if it exists.
-    pub fn sqrt(&self) -> CtOption<Self> {
+    fn sqrt(&self) -> CtOption<Self> {
         // Tonelli-Shank's algorithm for q mod 16 = 1
         // https://eprint.iacr.org/2012/685.pdf (page 12, algorithm 5)
 
@@ -363,7 +423,9 @@ impl Fq {
             (&x * &x).ct_eq(self), // Only return Some if it's the square root.
         )
     }
+}
 
+impl Fq {
     /// Exponentiates `self` by `by`, where `by` is a
     /// little-endian order integer exponent.
     pub fn pow(&self, by: &[u64; 4]) -> Self {
@@ -378,30 +440,40 @@ impl Fq {
         }
         res
     }
+}
 
-    /// Exponentiates `self` by `by`, where `by` is a
-    /// little-endian order integer exponent.
-    ///
-    /// **This operation is variable time with respect
-    /// to the exponent.** If the exponent is fixed,
-    /// this operation is effectively constant time.
-    pub fn pow_vartime(&self, by: &[u64; 4]) -> Self {
-        let mut res = Self::one();
-        for e in by.iter().rev() {
-            for i in (0..64).rev() {
-                res = res.square();
+impl Field for Fq {
+    /// Returns zero, the additive identity.
+    #[inline]
+    fn zero() -> Fq {
+        Fq::field_zero()
+    }
 
-                if ((*e >> i) & 1) == 1 {
-                    res.mul_assign(self);
-                }
-            }
-        }
-        res
+    /// Returns one, the multiplicative identity.
+    #[inline]
+    fn one() -> Fq {
+        Fq::field_one()
+    }
+
+    fn is_zero(&self) -> bool {
+        self.ct_eq(&Fq::zero()).into()
+    }
+
+    /// Doubles this field element.
+    #[inline]
+    fn double(&self) -> Fq {
+        self.field_double()
+    }
+
+    /// Squares this element.
+    #[inline]
+    fn square(&self) -> Fq {
+        self.field_square()
     }
 
     /// Computes the multiplicative inverse of this element,
     /// failing if the element is zero.
-    pub fn invert(&self) -> CtOption<Self> {
+    fn invert(&self) -> CtOption<Self> {
         #[inline(always)]
         fn square_assign_multi(n: &mut Fq, num_times: usize) {
             for _ in 0..num_times {
@@ -498,6 +570,13 @@ impl Fq {
         CtOption::new(t0, !self.ct_eq(&Self::zero()))
     }
 
+    #[inline(always)]
+    fn frobenius_map(&mut self, _: usize) {
+        // This has no effect in a prime field.
+    }
+}
+
+impl Fq {
     #[inline]
     const fn montgomery_reduce(
         r0: u64,
@@ -602,9 +681,15 @@ impl Fq {
     }
 }
 
+impl From<Fq> for [u8; 32] {
+    fn from(value: Fq) -> [u8; 32] {
+        value.to_bytes()
+    }
+}
+
 impl<'a> From<&'a Fq> for [u8; 32] {
     fn from(value: &'a Fq) -> [u8; 32] {
-        value.into_bytes()
+        value.to_bytes()
     }
 }
 
@@ -651,9 +736,9 @@ fn test_equality() {
 }
 
 #[test]
-fn test_into_bytes() {
+fn test_to_bytes() {
     assert_eq!(
-        Fq::zero().into_bytes(),
+        Fq::zero().to_bytes(),
         [
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0
@@ -661,7 +746,7 @@ fn test_into_bytes() {
     );
 
     assert_eq!(
-        Fq::one().into_bytes(),
+        Fq::one().to_bytes(),
         [
             1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0
@@ -669,7 +754,7 @@ fn test_into_bytes() {
     );
 
     assert_eq!(
-        R2.into_bytes(),
+        R2.to_bytes(),
         [
             254, 255, 255, 255, 1, 0, 0, 0, 2, 72, 3, 0, 250, 183, 132, 88, 245, 79, 188, 236, 239,
             79, 140, 153, 111, 5, 197, 172, 89, 177, 36, 24
@@ -677,7 +762,7 @@ fn test_into_bytes() {
     );
 
     assert_eq!(
-        (-&Fq::one()).into_bytes(),
+        (-&Fq::one()).to_bytes(),
         [
             0, 0, 0, 0, 255, 255, 255, 255, 254, 91, 254, 255, 2, 164, 189, 83, 5, 216, 161, 9, 8,
             216, 57, 51, 72, 125, 157, 41, 83, 167, 237, 115
@@ -914,7 +999,7 @@ fn test_multiplication() {
 
         let mut tmp2 = Fq::zero();
         for b in cur
-            .into_bytes()
+            .to_bytes()
             .iter()
             .rev()
             .flat_map(|byte| (0..8).rev().map(move |i| ((byte >> i) & 1u8) == 1u8))
@@ -943,7 +1028,7 @@ fn test_squaring() {
 
         let mut tmp2 = Fq::zero();
         for b in cur
-            .into_bytes()
+            .to_bytes()
             .iter()
             .rev()
             .flat_map(|byte| (0..8).rev().map(move |i| ((byte >> i) & 1u8) == 1u8))

@@ -13,6 +13,10 @@ repository = "https://github.com/zkcrypto/jubjub"
 version = "0.1.0"
 edition = "2018"
 
+[dependencies]
+ff = { path = "../ff" }
+rand = { version = "0.4", default-features = false }
+
 [dependencies.byteorder]
 version = "1"
 default-features = false

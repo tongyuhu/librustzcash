@@ -36,6 +36,7 @@
 extern crate std;
 
 use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use ff::{Field, PrimeField, SqrtField};
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 
 #[macro_use]
@@ -214,9 +215,9 @@ impl AffineNielsPoint {
     /// Constructs this point from the neutral element `(0, 1)`.
     pub const fn identity() -> Self {
         AffineNielsPoint {
-            v_plus_u: Fq::one(),
-            v_minus_u: Fq::one(),
-            t2d: Fq::zero(),
+            v_plus_u: Fq::field_one(),
+            v_minus_u: Fq::field_one(),
+            t2d: Fq::field_zero(),
         }
     }
 
@@ -256,7 +257,7 @@ impl<'a, 'b> Mul<&'b Fr> for &'a AffineNielsPoint {
     type Output = ExtendedPoint;
 
     fn mul(self, other: &'b Fr) -> ExtendedPoint {
-        self.multiply(&other.into_bytes())
+        self.multiply(&other.to_bytes())
     }
 }
 
@@ -297,10 +298,10 @@ impl ExtendedNielsPoint {
     /// Constructs this point from the neutral element `(0, 1)`.
     pub const fn identity() -> Self {
         ExtendedNielsPoint {
-            v_plus_u: Fq::one(),
-            v_minus_u: Fq::one(),
-            z: Fq::one(),
-            t2d: Fq::zero(),
+            v_plus_u: Fq::field_one(),
+            v_minus_u: Fq::field_one(),
+            z: Fq::field_one(),
+            t2d: Fq::field_zero(),
         }
     }
 
@@ -340,7 +341,7 @@ impl<'a, 'b> Mul<&'b Fr> for &'a ExtendedNielsPoint {
     type Output = ExtendedPoint;
 
     fn mul(self, other: &'b Fr) -> ExtendedPoint {
-        self.multiply(&other.into_bytes())
+        self.multiply(&other.to_bytes())
     }
 }
 
@@ -366,8 +367,8 @@ impl AffinePoint {
     /// Constructs the neutral element `(0, 1)`.
     pub const fn identity() -> Self {
         AffinePoint {
-            u: Fq::zero(),
-            v: Fq::one(),
+            u: Fq::field_zero(),
+            v: Fq::field_one(),
         }
     }
 
@@ -398,9 +399,9 @@ impl AffinePoint {
     }
 
     /// Converts this element into its byte representation.
-    pub fn into_bytes(&self) -> [u8; 32] {
-        let mut tmp = self.v.into_bytes();
-        let u = self.u.into_bytes();
+    pub fn to_bytes(&self) -> [u8; 32] {
+        let mut tmp = self.v.to_bytes();
+        let u = self.u.to_bytes();
 
         // Encode the sign of the u-coordinate in the most
         // significant bit.
@@ -438,7 +439,7 @@ impl AffinePoint {
                 .sqrt()
                 .and_then(|u| {
                     // Fix the sign of `u` if necessary
-                    let flip_sign = Choice::from((u.into_bytes()[0] ^ sign) & 1);
+                    let flip_sign = Choice::from((u.to_bytes()[0] ^ sign) & 1);
                     let u_negated = -u;
                     let final_u = Fq::conditional_select(&u, &u_negated, flip_sign);
 
@@ -489,11 +490,11 @@ impl ExtendedPoint {
     /// Constructs an extended point from the neutral element `(0, 1)`.
     pub const fn identity() -> Self {
         ExtendedPoint {
-            u: Fq::zero(),
-            v: Fq::one(),
-            z: Fq::one(),
-            t1: Fq::zero(),
-            t2: Fq::zero(),
+            u: Fq::field_zero(),
+            v: Fq::field_one(),
+            z: Fq::field_one(),
+            t1: Fq::field_zero(),
+            t2: Fq::field_zero(),
         }
     }
 
@@ -659,7 +660,7 @@ impl<'a, 'b> Mul<&'b Fr> for &'a ExtendedPoint {
     type Output = ExtendedPoint;
 
     fn mul(self, other: &'b Fr) -> ExtendedPoint {
-        self.multiply(&other.into_bytes())
+        self.multiply(&other.to_bytes())
     }
 }
 
@@ -1314,7 +1315,7 @@ fn test_serialization_consistency() {
     for expected_serialized in v {
         assert!(p.is_on_curve_vartime());
         let affine = AffinePoint::from(p);
-        let serialized = affine.into_bytes();
+        let serialized = affine.to_bytes();
         let deserialized = AffinePoint::from_bytes(serialized).unwrap();
         assert_eq!(affine, deserialized);
         assert_eq!(expected_serialized, serialized);
