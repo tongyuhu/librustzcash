@@ -6,18 +6,19 @@ use crypto_api_chachapoly::{ChaCha20Ietf, ChachaPolyIetf};
 use ff::{PrimeField, PrimeFieldRepr};
 use pairing::bls12_381::{Bls12, Fr};
 use rand::{OsRng, Rng};
-use sapling_crypto::{
+use std::fmt;
+use std::str;
+
+use crate::{
+    keys::OutgoingViewingKey,
     jubjub::{
         edwards,
         fs::{Fs, FsRepr},
         PrimeOrder, ToUniform, Unknown,
     },
     primitives::{Diversifier, Note, PaymentAddress},
+    JUBJUB,
 };
-use std::fmt;
-use std::str;
-
-use crate::{keys::OutgoingViewingKey, JUBJUB};
 
 pub const KDF_SAPLING_PERSONALIZATION: &'static [u8; 16] = b"Zcash_SaplingKDF";
 pub const PRF_OCK_PERSONALIZATION: &'static [u8; 16] = b"Zcash_Derive_ock";
@@ -215,17 +216,14 @@ fn prf_ock(
 /// ```
 /// extern crate pairing;
 /// extern crate rand;
-/// extern crate sapling_crypto;
 ///
 /// use pairing::bls12_381::Bls12;
 /// use rand::{OsRng, Rand};
-/// use sapling_crypto::{
-///     jubjub::fs::Fs,
-///     primitives::{Diversifier, PaymentAddress, ValueCommitment},
-/// };
 /// use zcash_primitives::{
+///     jubjub::fs::Fs,
 ///     keys::OutgoingViewingKey,
 ///     note_encryption::{Memo, SaplingNoteEncryption},
+///     primitives::{Diversifier, PaymentAddress, ValueCommitment},
 ///     JUBJUB,
 /// };
 ///
@@ -550,21 +548,22 @@ mod tests {
     use ff::{PrimeField, PrimeFieldRepr};
     use pairing::bls12_381::{Bls12, Fr, FrRepr};
     use rand::{thread_rng, Rand, Rng};
-    use sapling_crypto::{
-        jubjub::{
-            edwards,
-            fs::{Fs, FsRepr},
-            PrimeOrder, Unknown,
-        },
-        primitives::{Diversifier, PaymentAddress, ValueCommitment},
-    };
 
     use super::{
         kdf_sapling, prf_ock, sapling_ka_agree, try_sapling_compact_note_decryption,
         try_sapling_note_decryption, try_sapling_output_recovery, Memo, SaplingNoteEncryption,
         COMPACT_NOTE_SIZE, ENC_CIPHERTEXT_SIZE, OUT_CIPHERTEXT_SIZE,
     };
-    use crate::{keys::OutgoingViewingKey, JUBJUB};
+    use crate::{
+        jubjub::{
+            edwards,
+            fs::{Fs, FsRepr},
+            PrimeOrder, Unknown,
+        },
+        keys::OutgoingViewingKey,
+        primitives::{Diversifier, PaymentAddress, ValueCommitment},
+        JUBJUB,
+    };
 
     #[test]
     fn memo_from_str() {

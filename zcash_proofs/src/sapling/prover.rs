@@ -4,22 +4,22 @@ use bellman::groth16::{
 use ff::Field;
 use pairing::bls12_381::{Bls12, Fr};
 use rand::{OsRng, Rand};
-use sapling_crypto::{
-    circuit::{
-        multipack,
-        sapling::{Output, Spend},
-    },
-    jubjub::{edwards, fs::Fs, FixedGenerators, JubjubBls12, Unknown},
-    primitives::{Diversifier, Note, PaymentAddress, ProofGenerationKey, ValueCommitment},
-};
 use std::ops::{AddAssign, Neg};
 use zcash_primitives::{
+    jubjub::{edwards, fs::Fs, FixedGenerators, JubjubBls12, Unknown},
     merkle_tree::CommitmentTreeWitness,
+    primitives::{Diversifier, Note, PaymentAddress, ProofGenerationKey, ValueCommitment},
     redjubjub::{PrivateKey, PublicKey, Signature},
     sapling::Node,
 };
 
 use super::compute_value_balance;
+use crate::{
+    circuit::{
+        multipack,
+        sapling::{Output, Spend},
+    },
+};
 
 /// A context object for creating the Sapling components of a Zcash transaction.
 pub struct SaplingProvingContext {

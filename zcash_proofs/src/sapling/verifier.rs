@@ -1,13 +1,11 @@
 use bellman::groth16::{verify_proof, PreparedVerifyingKey, Proof};
 use ff::Field;
 use pairing::bls12_381::{Bls12, Fr};
-use sapling_crypto::{
-    circuit::multipack,
-    jubjub::{edwards, FixedGenerators, JubjubBls12, Unknown},
-};
+use zcash_primitives::jubjub::{edwards, FixedGenerators, JubjubBls12, Unknown};
 use zcash_primitives::redjubjub::{PublicKey, Signature};
 
 use super::compute_value_balance;
+use crate::circuit::multipack;
 
 fn is_small_order<Order>(p: &edwards::Point<Bls12, Order>, params: &JubjubBls12) -> bool {
     p.double(params).double(params).double(params) == edwards::Point::zero()

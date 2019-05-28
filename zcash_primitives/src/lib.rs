@@ -10,16 +10,25 @@ extern crate fpe;
 extern crate hex;
 extern crate pairing;
 extern crate rand;
-extern crate sapling_crypto;
 extern crate sha2;
+extern crate subtle;
 
-use sapling_crypto::jubjub::JubjubBls12;
+#[cfg(test)]
+#[macro_use]
+extern crate hex_literal;
+
+use crate::jubjub::JubjubBls12;
 
 pub mod block;
+pub mod constants;
+pub mod group_hash;
+pub mod jubjub;
 pub mod keys;
 pub mod legacy;
 pub mod merkle_tree;
 pub mod note_encryption;
+pub mod pedersen_hash;
+pub mod primitives;
 pub mod prover;
 pub mod redjubjub;
 pub mod sapling;

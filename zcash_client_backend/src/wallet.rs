@@ -2,11 +2,11 @@
 //! light client.
 
 use pairing::bls12_381::{Bls12, Fr};
-use sapling_crypto::{
+use zcash_primitives::{
     jubjub::{edwards, PrimeOrder},
     primitives::{Note, PaymentAddress},
+    transaction::TxId,
 };
-use zcash_primitives::transaction::TxId;
 
 /// A subset of a [`Transaction`] relevant to wallets and light clients.
 ///

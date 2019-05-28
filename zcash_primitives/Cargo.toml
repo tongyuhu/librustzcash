@@ -3,6 +3,7 @@ name = "zcash_primitives"
 version = "0.0.0"
 authors = [
     "Jack Grigg <jack@z.cash>",
+    "Sean Bowe <sean@z.cash>",
 ]
 
 [dependencies]
@@ -15,9 +16,12 @@ hex = "0.3"
 lazy_static = "1"
 pairing = { path = "../pairing" }
 rand = "0.4"
-sapling-crypto = { path = "../sapling-crypto" }
 sha2 = "0.8"
+subtle = "2.1"
 
 [dependencies.blake2-rfc]
 git = "https://github.com/gtank/blake2-rfc"
 rev = "7a5b5fc99ae483a0043db7547fb79a6fa44b88a9"
+
+[dev-dependencies]
+hex-literal = "0.1"

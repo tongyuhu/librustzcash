@@ -14,9 +14,3 @@ extern crate hex_literal;
 #[cfg(test)]
 extern crate crypto;
 
-pub mod jubjub;
-pub mod group_hash;
-pub mod circuit;
-pub mod pedersen_hash;
-pub mod primitives;
-pub mod constants;

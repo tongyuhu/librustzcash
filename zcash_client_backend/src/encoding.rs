@@ -6,13 +6,11 @@
 use bech32::{convert_bits, Bech32, Error};
 use bs58::{self, decode::DecodeError};
 use pairing::bls12_381::Bls12;
-use sapling_crypto::{
-    jubjub::edwards,
-    primitives::{Diversifier, PaymentAddress},
-};
 use std::io::{self, Write};
 use zcash_primitives::{
+    jubjub::edwards,
     legacy::TransparentAddress,
+    primitives::{Diversifier, PaymentAddress},
     zip32::{ExtendedFullViewingKey, ExtendedSpendingKey},
     JUBJUB,
 };
@@ -104,15 +102,15 @@ pub fn decode_extended_full_viewing_key(
 /// ```
 /// use pairing::bls12_381::Bls12;
 /// use rand::{SeedableRng, XorShiftRng};
-/// use sapling_crypto::{
-///     jubjub::edwards,
-///     primitives::{Diversifier, PaymentAddress},
-/// };
 /// use zcash_client_backend::{
 ///     constants::testnet::HRP_SAPLING_PAYMENT_ADDRESS,
 ///     encoding::encode_payment_address,
 /// };
-/// use zcash_primitives::JUBJUB;
+/// use zcash_primitives::{
+///     jubjub::edwards,
+///     primitives::{Diversifier, PaymentAddress},
+///     JUBJUB,
+/// };
 ///
 /// let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 ///
@@ -140,15 +138,15 @@ pub fn encode_payment_address(hrp: &str, addr: &PaymentAddress<Bls12>) -> String
 /// ```
 /// use pairing::bls12_381::Bls12;
 /// use rand::{SeedableRng, XorShiftRng};
-/// use sapling_crypto::{
-///     jubjub::edwards,
-///     primitives::{Diversifier, PaymentAddress},
-/// };
 /// use zcash_client_backend::{
 ///     constants::testnet::HRP_SAPLING_PAYMENT_ADDRESS,
 ///     encoding::decode_payment_address,
 /// };
-/// use zcash_primitives::JUBJUB;
+/// use zcash_primitives::{
+///     jubjub::edwards,
+///     primitives::{Diversifier, PaymentAddress},
+///     JUBJUB,
+/// };
 ///
 /// let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 ///
@@ -287,11 +285,11 @@ pub fn decode_transparent_address(
 mod tests {
     use pairing::bls12_381::Bls12;
     use rand::{SeedableRng, XorShiftRng};
-    use sapling_crypto::{
+    use zcash_primitives::{
         jubjub::edwards,
         primitives::{Diversifier, PaymentAddress},
+        JUBJUB,
     };
-    use zcash_primitives::JUBJUB;
 
     use super::{decode_payment_address, encode_payment_address};
     use crate::constants;

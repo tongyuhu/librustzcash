@@ -5,8 +5,14 @@ extern crate directories;
 extern crate ff;
 extern crate pairing;
 extern crate rand;
-extern crate sapling_crypto;
 extern crate zcash_primitives;
+
+#[cfg(test)]
+#[macro_use]
+extern crate hex_literal;
+
+#[cfg(test)]
+extern crate crypto;
 
 use bellman::groth16::{prepare_verifying_key, Parameters, PreparedVerifyingKey, VerifyingKey};
 use pairing::bls12_381::Bls12;
@@ -14,6 +20,7 @@ use std::fs::File;
 use std::io::{self, BufReader};
 use std::path::Path;
 
+pub mod circuit;
 mod hashreader;
 pub mod prover;
 pub mod sapling;

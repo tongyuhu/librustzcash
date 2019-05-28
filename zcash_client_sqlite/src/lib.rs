@@ -27,10 +27,6 @@ use ff::{PrimeField, PrimeFieldRepr};
 use pairing::bls12_381::Bls12;
 use protobuf::parse_from_bytes;
 use rusqlite::{types::ToSql, Connection, NO_PARAMS};
-use sapling_crypto::{
-    jubjub::fs::{Fs, FsRepr},
-    primitives::{Diversifier, Note},
-};
 use std::cmp;
 use std::error;
 use std::fmt;
@@ -44,8 +40,10 @@ use zcash_client_backend::{
 };
 use zcash_primitives::{
     block::BlockHash,
+    jubjub::fs::{Fs, FsRepr},
     merkle_tree::{CommitmentTree, IncrementalWitness},
     note_encryption::Memo,
+    primitives::{Diversifier, Note},
     prover::TxProver,
     sapling::Node,
     transaction::{
@@ -1166,10 +1164,6 @@ mod tests {
     use protobuf::Message;
     use rand::{thread_rng, Rand, Rng};
     use rusqlite::{types::ToSql, Connection};
-    use sapling_crypto::{
-        jubjub::fs::Fs,
-        primitives::{Note, PaymentAddress},
-    };
     use std::path::Path;
     use tempfile::NamedTempFile;
     use zcash_client_backend::{
@@ -1178,7 +1172,9 @@ mod tests {
     };
     use zcash_primitives::{
         block::BlockHash,
+        jubjub::fs::Fs,
         note_encryption::{Memo, SaplingNoteEncryption},
+        primitives::{Note, PaymentAddress},
         prover::TxProver,
         transaction::components::Amount,
         zip32::{ExtendedFullViewingKey, ExtendedSpendingKey},

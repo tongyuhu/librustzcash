@@ -1,12 +1,14 @@
 //! Structs for handling supported address types.
 
 use pairing::bls12_381::Bls12;
-use sapling_crypto::primitives::PaymentAddress;
 use zcash_client_backend::encoding::{
     decode_payment_address, decode_transparent_address, encode_payment_address,
     encode_transparent_address,
 };
-use zcash_primitives::legacy::TransparentAddress;
+use zcash_primitives::{
+    legacy::TransparentAddress,
+    primitives::PaymentAddress,
+};
 
 use super::Error;
 

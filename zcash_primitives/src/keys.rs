@@ -2,11 +2,12 @@
 
 use blake2_rfc::blake2b::{Blake2b, Blake2bResult};
 use ff::{PrimeField, PrimeFieldRepr};
-use sapling_crypto::{
+use std::io::{self, Read, Write};
+
+use crate::{
     jubjub::{edwards, FixedGenerators, JubjubEngine, JubjubParams, ToUniform, Unknown},
     primitives::{ProofGenerationKey, ViewingKey},
 };
-use std::io::{self, Read, Write};
 
 pub const PRF_EXPAND_PERSONALIZATION: &'static [u8; 16] = b"Zcash_ExpandSeed";
 

@@ -3,15 +3,13 @@ use blake2_rfc::blake2b::Blake2b;
 use byteorder::{ByteOrder, LittleEndian, ReadBytesExt, WriteBytesExt};
 use fpe::ff1::{BinaryNumeralString, FF1};
 use pairing::bls12_381::Bls12;
-use sapling_crypto::{
-    jubjub::{fs::Fs, FixedGenerators, JubjubEngine, JubjubParams, ToUniform},
-    primitives::{Diversifier, PaymentAddress, ViewingKey},
-};
 use std::io::{self, Read, Write};
 use std::ops::AddAssign;
 
 use crate::{
+    jubjub::{fs::Fs, FixedGenerators, JubjubEngine, JubjubParams, ToUniform},
     keys::{prf_expand, prf_expand_vec, ExpandedSpendingKey, FullViewingKey, OutgoingViewingKey},
+    primitives::{Diversifier, PaymentAddress, ViewingKey},
     JUBJUB,
 };
 

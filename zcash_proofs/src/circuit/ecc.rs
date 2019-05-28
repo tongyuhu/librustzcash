@@ -16,7 +16,7 @@ use super::num::{
     Num
 };
 
-use ::jubjub::{
+use zcash_primitives::jubjub::{
     edwards,
     JubjubEngine,
     JubjubParams,
@@ -723,14 +723,14 @@ mod test {
     use ff::{BitIterator, Field, PrimeField};
     use pairing::bls12_381::{Bls12, Fr};
     use ::circuit::test::*;
-    use ::jubjub::{
+    use zcash_primitives::jubjub::{
         montgomery,
         edwards,
         JubjubBls12,
         JubjubParams,
         FixedGenerators
     };
-    use ::jubjub::fs::Fs;
+    use zcash_primitives::jubjub::fs::Fs;
     use super::{
         MontgomeryPoint,
         EdwardsPoint,

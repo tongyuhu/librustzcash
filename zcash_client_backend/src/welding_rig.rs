@@ -3,9 +3,9 @@
 use ff::{PrimeField, PrimeFieldRepr};
 use pairing::bls12_381::{Bls12, Fr, FrRepr};
 use protobuf::parse_from_bytes;
-use sapling_crypto::jubjub::{edwards, fs::Fs};
 use std::collections::HashSet;
 use zcash_primitives::{
+    jubjub::{edwards, fs::Fs},
     merkle_tree::{CommitmentTree, IncrementalWitness},
     note_encryption::try_sapling_compact_note_decryption,
     sapling::Node,
@@ -222,13 +222,11 @@ mod tests {
     use ff::{PrimeField, PrimeFieldRepr};
     use pairing::bls12_381::{Bls12, Fr};
     use rand::{thread_rng, Rand, Rng};
-    use sapling_crypto::{
-        jubjub::{fs::Fs, FixedGenerators, JubjubParams, ToUniform},
-        primitives::Note,
-    };
     use zcash_primitives::{
+        jubjub::{fs::Fs, FixedGenerators, JubjubParams, ToUniform},
         merkle_tree::CommitmentTree,
         note_encryption::{Memo, SaplingNoteEncryption},
+        primitives::Note,
         transaction::components::Amount,
         zip32::{ExtendedFullViewingKey, ExtendedSpendingKey},
         JUBJUB,

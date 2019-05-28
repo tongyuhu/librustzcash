@@ -1,13 +1,11 @@
 //! Abstractions over the proving system and parameters.
 
 use pairing::bls12_381::{Bls12, Fr};
-use sapling_crypto::{
-    jubjub::{edwards, fs::Fs, Unknown},
-    primitives::{Diversifier, PaymentAddress, ProofGenerationKey},
-};
 
 use crate::{
+    jubjub::{edwards, fs::Fs, Unknown},
     merkle_tree::CommitmentTreeWitness,
+    primitives::{Diversifier, PaymentAddress, ProofGenerationKey},
     redjubjub::{PublicKey, Signature},
     sapling::Node,
     transaction::components::GROTH_PROOF_SIZE,
@@ -74,13 +72,11 @@ pub trait TxProver {
 pub(crate) mod mock {
     use pairing::bls12_381::{Bls12, Fr};
     use rand::{OsRng, Rand};
-    use sapling_crypto::{
-        jubjub::{edwards, fs::Fs, FixedGenerators, Unknown},
-        primitives::{Diversifier, PaymentAddress, ProofGenerationKey, ValueCommitment},
-    };
 
     use crate::{
+        jubjub::{edwards, fs::Fs, FixedGenerators, Unknown},
         merkle_tree::CommitmentTreeWitness,
+        primitives::{Diversifier, PaymentAddress, ProofGenerationKey, ValueCommitment},
         redjubjub::{PublicKey, Signature},
         sapling::Node,
         transaction::components::GROTH_PROOF_SIZE,

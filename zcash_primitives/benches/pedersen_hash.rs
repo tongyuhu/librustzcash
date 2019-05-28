@@ -3,12 +3,12 @@
 extern crate rand;
 extern crate test;
 extern crate pairing;
-extern crate sapling_crypto;
+extern crate zcash_primitives;
 
 use rand::{Rand, thread_rng};
 use pairing::bls12_381::Bls12;
-use sapling_crypto::jubjub::JubjubBls12;
-use sapling_crypto::pedersen_hash::{pedersen_hash, Personalization};
+use zcash_primitives::jubjub::JubjubBls12;
+use zcash_primitives::pedersen_hash::{pedersen_hash, Personalization};
 
 #[bench]
 fn bench_pedersen_hash(b: &mut test::Bencher) {

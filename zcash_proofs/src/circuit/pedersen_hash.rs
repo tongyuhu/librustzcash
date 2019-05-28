@@ -4,20 +4,18 @@ use super::ecc::{
     EdwardsPoint
 };
 use super::boolean::Boolean;
-use ::jubjub::*;
+use zcash_primitives::jubjub::*;
 use bellman::{
     ConstraintSystem
 };
 use super::lookup::*;
-pub use pedersen_hash::Personalization;
+pub use zcash_primitives::pedersen_hash::Personalization;
 
-impl Personalization {
-    fn get_constant_bools(&self) -> Vec<Boolean> {
-        self.get_bits()
+fn get_constant_bools(person: &Personalization) -> Vec<Boolean> {
+    person.get_bits()
         .into_iter()
         .map(|e| Boolean::constant(e))
         .collect()
-    }
 }
 
 pub fn pedersen_hash<E: JubjubEngine, CS>(
@@ -28,7 +26,7 @@ pub fn pedersen_hash<E: JubjubEngine, CS>(
 ) -> Result<EdwardsPoint<E>, SynthesisError>
     where CS: ConstraintSystem<E>
 {
-    let personalization = personalization.get_constant_bools();
+    let personalization = get_constant_bools(&personalization);
     assert_eq!(personalization.len(), 6);
 
     let mut edwards_result = None;
@@ -118,6 +116,7 @@ mod test {
     use ::circuit::boolean::{Boolean, AllocatedBit};
     use ff::PrimeField;
     use pairing::bls12_381::{Bls12, Fr};
+    use zcash_primitives::pedersen_hash::pedersen_hash as ph_outside_circuit;
 
     #[test]
     fn test_pedersen_hash_constraints() {
@@ -170,7 +169,7 @@ mod test {
 
                 assert!(cs.is_satisfied());
 
-                let expected = ::pedersen_hash::pedersen_hash::<Bls12, _>(
+                let expected = ph_outside_circuit::<Bls12, _>(
                     Personalization::MerkleTree(1),
                     input.clone().into_iter(),
                     params
@@ -180,7 +179,7 @@ mod test {
                 assert_eq!(res.get_y().get_value().unwrap(), expected.1);
 
                 // Test against the output of a different personalization
-                let unexpected = ::pedersen_hash::pedersen_hash::<Bls12, _>(
+                let unexpected = ph_outside_circuit::<Bls12, _>(
                     Personalization::MerkleTree(0),
                     input.into_iter(),
                     params

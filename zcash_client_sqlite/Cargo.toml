@@ -13,7 +13,6 @@ ff = { path = "../ff" }
 pairing = { path = "../pairing" }
 protobuf = "2"
 rusqlite = { version = "0.15", features = ["bundled"] }
-sapling-crypto = { path = "../sapling-crypto" }
 time = "0.1"
 zcash_client_backend = { path = "../zcash_client_backend" }
 zcash_primitives = { path = "../zcash_primitives" }

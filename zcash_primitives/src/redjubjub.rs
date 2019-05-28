@@ -3,12 +3,12 @@
 
 use ff::{PrimeField, PrimeFieldRepr};
 use rand::{Rand, Rng};
-use sapling_crypto::jubjub::{
-    edwards::Point, FixedGenerators, JubjubEngine, JubjubParams, Unknown,
-};
 use std::io::{self, Read, Write};
 use std::ops::{AddAssign, MulAssign, Neg};
 
+use crate::jubjub::{
+    edwards::Point, FixedGenerators, JubjubEngine, JubjubParams, Unknown,
+};
 use util::hash_to_scalar;
 
 fn read_scalar<E: JubjubEngine, R: Read>(reader: R) -> io::Result<E::Fs> {
@@ -214,9 +214,9 @@ pub fn batch_verify<'a, E: JubjubEngine, R: Rng>(
 mod tests {
     use pairing::bls12_381::Bls12;
     use rand::thread_rng;
-    use sapling_crypto::jubjub::{edwards, fs::Fs, JubjubBls12};
 
     use super::*;
+    use crate::jubjub::{edwards, fs::Fs, JubjubBls12};
 
     #[test]
     fn test_batch_verify() {
