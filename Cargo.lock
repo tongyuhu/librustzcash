@@ -665,22 +665,6 @@ version = "0.3.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "sapling-crypto"
-version = "0.0.1"
-dependencies = [
- "bellman 0.1.0",
- "blake2-rfc 0.2.18 (git+https://github.com/gtank/blake2-rfc?rev=7a5b5fc99ae483a0043db7547fb79a6fa44b88a9)",
- "byteorder 1.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "digest 0.7.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "ff 0.4.0",
- "hex-literal 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "pairing 0.14.2",
- "rand 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "rust-crypto 0.2.36 (registry+https://github.com/rust-lang/crates.io-index)",
- "subtle 2.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
 name = "sha2"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
