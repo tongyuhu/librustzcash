@@ -1,0 +1,27 @@
+#[macro_use]
+extern crate criterion;
+
+extern crate hex;
+extern crate zcash_primitives;
+
+use criterion::Criterion;
+use zcash_primitives::{merkle_tree::CommitmentTree, sapling::Node};
+
+const SAPLING_TREE_MAINNET_426335: &str =
+    "0109f2d0a8ce32f7d20d85a3754b2261f30a0ad4a064e425ceb59beb23ddc7152201e0fbb465bed275e63fca98e188f7e23befb0a9120b8263987ddf0c7a16f3ce5a0f01e3d712e4f450250c3ef69532345cbf5cdb7fd00cc49434315ea65288d706e05c00012e13311f7e6a39a2a7c4bd9494cb09e07a906c7aa321fc0c1cc79ced6a5e8d6601b8666c2809a9a736554ee20a1613706769c4c7276ba1882ace95ef647473a322000001f0b59c1e5ae0fc6ffe7c5d166a81a0ac28791338b2a5a9bd9f52d5c4c02f4d080000013589be9e2d9e9e38fd78b1e8eaec5b5f5167bf7fd2b1c95c316fa366a24cac4c01a86b141bdb55fd5f5b2e880ea4e07caf2bbf1ac7b52a9f504977913068a917270001dd960b6c11b157d1626f0768ec099af9385aea3f31c91111a8c5b899ffb99e6b0192acd61b1853311b0bf166057ca433e231c93ab5988844a09a91c113ebc58e18019fbfd76ad6d98cafa0174391546e7022afe62e870e20e16d57c4c419a5c2bb69";
+
+fn empty_tree_root(c: &mut Criterion) {
+    let tree = CommitmentTree::<Node>::new();
+    c.bench_function("root of empty tree", move |b| b.iter(|| tree.root()));
+}
+
+fn tree_root_426335(c: &mut Criterion) {
+    let tree_bytes = hex::decode(&SAPLING_TREE_MAINNET_426335).unwrap();
+    let tree = CommitmentTree::<Node>::read(&tree_bytes[..]).unwrap();
+    c.bench_function("root of tree at height 426335", move |b| {
+        b.iter(|| tree.root())
+    });
+}
+
+criterion_group!(benches, empty_tree_root, tree_root_426335);
+criterion_main!(benches);

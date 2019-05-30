@@ -6,9 +6,7 @@ use rand::{Rand, Rng};
 use std::io::{self, Read, Write};
 use std::ops::{AddAssign, MulAssign, Neg};
 
-use crate::jubjub::{
-    edwards::Point, FixedGenerators, JubjubEngine, JubjubParams, Unknown,
-};
+use crate::jubjub::{edwards::Point, FixedGenerators, JubjubEngine, JubjubParams, Unknown};
 use util::hash_to_scalar;
 
 fn read_scalar<E: JubjubEngine, R: Read>(mut reader: R) -> io::Result<E::Fs> {

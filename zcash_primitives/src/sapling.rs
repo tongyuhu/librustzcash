@@ -5,13 +5,13 @@ use pairing::bls12_381::{Bls12, Fr};
 use rand::OsRng;
 use std::io::{self, Read, Write};
 
+use crate::merkle_tree::Hashable;
+use crate::redjubjub::{PrivateKey, PublicKey, Signature};
 use crate::{
     jubjub::{fs::Fs, FixedGenerators, JubjubBls12},
     pedersen_hash::{pedersen_hash, Personalization},
     primitives::Note,
 };
-use crate::merkle_tree::Hashable;
-use crate::redjubjub::{PrivateKey, PublicKey, Signature};
 use JUBJUB;
 
 pub const SAPLING_COMMITMENT_TREE_DEPTH: usize = 32;

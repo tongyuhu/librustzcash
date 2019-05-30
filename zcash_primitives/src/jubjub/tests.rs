@@ -1,19 +1,9 @@
-use super::{
-    JubjubEngine,
-    JubjubParams,
-    PrimeOrder,
-    montgomery,
-    edwards
-};
+use super::{edwards, montgomery, JubjubEngine, JubjubParams, PrimeOrder};
 
-use ff::{
-    Field,
-    PrimeField,
-    SqrtField,
-};
+use ff::{Field, PrimeField, SqrtField};
 use std::ops::{AddAssign, MulAssign, Neg, SubAssign};
 
-use rand::{XorShiftRng, SeedableRng, Rand};
+use rand::{Rand, SeedableRng, XorShiftRng};
 
 pub fn test_suite<E: JubjubEngine>(params: &E::Params) {
     test_back_and_forth::<E>(params);
@@ -28,12 +18,7 @@ pub fn test_suite<E: JubjubEngine>(params: &E::Params) {
     test_read_write::<E>(params);
 }
 
-fn is_on_mont_curve<E: JubjubEngine, P: JubjubParams<E>>(
-    x: E::Fr,
-    y: E::Fr,
-    params: &P
-) -> bool
-{
+fn is_on_mont_curve<E: JubjubEngine, P: JubjubParams<E>>(x: E::Fr, y: E::Fr, params: &P) -> bool {
     let lhs = y.square();
 
     let x2 = x.square();
@@ -52,9 +37,8 @@ fn is_on_mont_curve<E: JubjubEngine, P: JubjubParams<E>>(
 fn is_on_twisted_edwards_curve<E: JubjubEngine, P: JubjubParams<E>>(
     x: E::Fr,
     y: E::Fr,
-    params: &P
-) -> bool
-{
+    params: &P,
+) -> bool {
     let x2 = x.square();
 
     let y2 = y.square();
@@ -141,7 +125,9 @@ fn test_order<E: JubjubEngine>(params: &E::Params) {
     let rng = &mut XorShiftRng::from_seed([0x3dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
 
     // The neutral element is in the prime order subgroup.
-    assert!(Point::<E, PrimeOrder>::zero().as_prime_order(params).is_some());
+    assert!(Point::<E, PrimeOrder>::zero()
+        .as_prime_order(params)
+        .is_some());
 
     for _ in 0..50 {
         // Pick a random point and multiply it by the cofactor
@@ -234,11 +220,7 @@ fn test_get_for<E: JubjubEngine>(params: &E::Params) {
             let mut p = p.unwrap();
             assert!(p.into_xy().0.into_repr().is_odd() == sign);
             p = p.negate();
-            assert!(
-                edwards::Point::<E, _>::get_for_y(y, !sign, params).unwrap()
-                ==
-                p
-            );
+            assert!(edwards::Point::<E, _>::get_for_y(y, !sign, params).unwrap() == p);
         }
     }
 }
@@ -290,13 +272,9 @@ fn test_back_and_forth<E: JubjubEngine>(params: &E::Params) {
         let mont = mont_p1.add(&mont_p2, params).mul(s, params);
         let edwards = edwards_p1.add(&edwards_p2, params).mul(s, params);
 
-        assert!(
-            montgomery::Point::from_edwards(&edwards, params) == mont
-        );
+        assert!(montgomery::Point::from_edwards(&edwards, params) == mont);
 
-        assert!(
-            edwards::Point::from_montgomery(&mont, params) == edwards
-        );
+        assert!(edwards::Point::from_montgomery(&mont, params) == edwards);
     }
 }
 
@@ -375,8 +353,7 @@ fn test_jubjub_params<E: JubjubEngine>(params: &E::Params) {
         let mut pacc = E::Fs::zero().into_repr();
         let mut nacc = E::Fs::char();
 
-        for _ in 0..params.pedersen_hash_chunks_per_generator()
-        {
+        for _ in 0..params.pedersen_hash_chunks_per_generator() {
             // tmp = cur * 4
             let mut tmp = cur;
             tmp.mul2();

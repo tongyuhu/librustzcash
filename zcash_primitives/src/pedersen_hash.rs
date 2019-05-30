@@ -6,14 +6,13 @@ use std::ops::{AddAssign, Neg};
 #[derive(Copy, Clone)]
 pub enum Personalization {
     NoteCommitment,
-    MerkleTree(usize)
+    MerkleTree(usize),
 }
 
 impl Personalization {
     pub fn get_bits(&self) -> Vec<bool> {
         match *self {
-            Personalization::NoteCommitment =>
-                vec![true, true, true, true, true, true],
+            Personalization::NoteCommitment => vec![true, true, true, true, true, true],
             Personalization::MerkleTree(num) => {
                 assert!(num < 63);
 
@@ -26,12 +25,16 @@ impl Personalization {
 pub fn pedersen_hash<E, I>(
     personalization: Personalization,
     bits: I,
-    params: &E::Params
+    params: &E::Params,
 ) -> edwards::Point<E, PrimeOrder>
-    where I: IntoIterator<Item=bool>,
-          E: JubjubEngine
+where
+    I: IntoIterator<Item = bool>,
+    E: JubjubEngine,
 {
-    let mut bits = personalization.get_bits().into_iter().chain(bits.into_iter());
+    let mut bits = personalization
+        .get_bits()
+        .into_iter()
+        .chain(bits.into_iter());
 
     let mut result = edwards::Point::zero();
     let mut generators = params.pedersen_hash_exp_table().iter();
