@@ -13,5 +13,6 @@ homepage = "https://github.com/ebfull/group"
 repository = "https://github.com/ebfull/group"
 
 [dependencies]
+byteorder = "1"
 ff = { path = "../ff" }
 rand = "0.4"

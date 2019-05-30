@@ -810,7 +810,7 @@ fn prime_field_impl(
         impl ::std::fmt::Debug for #name
         {
             fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-                write!(f, "{}({:?})", stringify!(#name), self.into_repr())
+                write!(f, "{}({:?})", stringify!(#name), self.to_bytes())
             }
         }
 
@@ -818,7 +818,7 @@ fn prime_field_impl(
         impl Ord for #name {
             #[inline(always)]
             fn cmp(&self, other: &#name) -> ::std::cmp::Ordering {
-                self.into_repr().cmp(&other.into_repr())
+                self.into_repr().cmp(&other.to_bytes())
             }
         }
 
@@ -831,7 +831,7 @@ fn prime_field_impl(
 
         impl ::std::fmt::Display for #name {
             fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-                write!(f, "{}({})", stringify!(#name), self.into_repr())
+                write!(f, "{}({})", stringify!(#name), self.to_bytes())
             }
         }
 

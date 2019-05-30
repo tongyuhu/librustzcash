@@ -1,7 +1,8 @@
+extern crate byteorder;
 extern crate ff;
 extern crate rand;
 
-use ff::{PrimeField, PrimeFieldDecodingError, ScalarEngine, SqrtField};
+use ff::{PrimeField, ScalarEngine, SqrtField};
 use std::error::Error;
 use std::fmt;
 use std::ops::{Add, AddAssign, Neg, Sub, SubAssign};
@@ -66,7 +67,7 @@ pub trait CurveProjective:
 
     /// Recommends a wNAF window table size given a scalar. Always returns a number
     /// between 2 and 22, inclusive.
-    fn recommended_wnaf_for_scalar(scalar: <Self::Scalar as PrimeField>::Repr) -> usize;
+    fn recommended_wnaf_for_scalar(scalar: Self::Scalar) -> usize;
 
     /// Recommends a wNAF window size given the number of scalars you intend to multiply
     /// a base by. Always returns a number between 2 and 22, inclusive.
@@ -193,7 +194,7 @@ pub enum GroupDecodingError {
     /// The element is not part of the r-order subgroup.
     NotInSubgroup,
     /// One of the coordinates could not be decoded
-    CoordinateDecodingError(&'static str, PrimeFieldDecodingError),
+    CoordinateDecodingError(&'static str),
     /// The compression mode of the encoded element was not as expected
     UnexpectedCompressionMode,
     /// The encoding contained bits that should not have been set
@@ -217,8 +218,8 @@ impl Error for GroupDecodingError {
 impl fmt::Display for GroupDecodingError {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match *self {
-            GroupDecodingError::CoordinateDecodingError(description, ref err) => {
-                write!(f, "{} decoding error: {}", description, err)
+            GroupDecodingError::CoordinateDecodingError(description) => {
+                write!(f, "{} decoding error", description)
             }
             _ => write!(f, "{}", self.description()),
         }

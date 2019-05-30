@@ -65,8 +65,6 @@ pub fn curve_tests<G: CurveProjective>() {
 }
 
 fn random_wnaf_tests<G: CurveProjective>() {
-    use ff::PrimeField;
-
     use wnaf::*;
 
     let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
@@ -78,7 +76,7 @@ fn random_wnaf_tests<G: CurveProjective>() {
         for w in 2..14 {
             for _ in 0..100 {
                 let g = G::rand(&mut rng);
-                let s = G::Scalar::rand(&mut rng).into_repr();
+                let s = G::Scalar::rand(&mut rng);
                 let mut g1 = g;
                 g1.mul_assign(s);
 
@@ -96,7 +94,7 @@ fn random_wnaf_tests<G: CurveProjective>() {
 
         for _ in 0..100 {
             let g = G::rand(&mut rng);
-            let s = G::Scalar::rand(&mut rng).into_repr();
+            let s = G::Scalar::rand(&mut rng);
             let mut g1 = g;
             g1.mul_assign(s);
 

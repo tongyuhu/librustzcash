@@ -1,4 +1,5 @@
-use ff::{PrimeField, PrimeFieldRepr};
+use byteorder::{ByteOrder, LittleEndian};
+use ff::PrimeField;
 
 use super::CurveProjective;
 
@@ -17,30 +18,63 @@ pub(crate) fn wnaf_table<G: CurveProjective>(table: &mut Vec<G>, mut base: G, wi
 }
 
 /// Replaces the contents of `wnaf` with the w-NAF representation of a scalar.
-pub(crate) fn wnaf_form<S: PrimeFieldRepr>(wnaf: &mut Vec<i64>, mut c: S, window: usize) {
+pub(crate) fn wnaf_form<S: PrimeField>(wnaf: &mut Vec<i64>, c: S, window: usize) {
+    // Required by the NAF definition
+    debug_assert!(window >= 2);
+    // Required so that the NAF digits fit in i64
+    debug_assert!(window <= 64);
+
     wnaf.truncate(0);
 
-    while !c.is_zero() {
-        let mut u;
-        if c.is_odd() {
-            u = (c.as_ref()[0] % (1 << (window + 1))) as i64;
+    let c = c.to_bytes();
+    let c_len = c.as_ref().len();
+    let u64_len = (c_len + 1) / 64;
 
-            if u > (1 << window) {
-                u -= 1 << (window + 1);
-            }
+    let mut c_u64 = vec![0u64; u64_len + 1];
+    LittleEndian::read_u64_into(c.as_ref(), &mut c_u64[0..u64_len]);
 
-            if u > 0 {
-                c.sub_noborrow(&S::from(u as u64));
-            } else {
-                c.add_nocarry(&S::from((-u) as u64));
-            }
+    let width = 1 << window;
+    let window_mask = width - 1;
+
+    let mut pos = 0;
+    let mut carry = 0;
+    while pos < c_len {
+        // Construct a buffer of bits of the scalar, starting at bit `pos`
+        let u64_idx = pos / 64;
+        let bit_idx = pos % 64;
+        let bit_buf: u64;
+        if bit_idx < 64 - window {
+            // This window's bits are contained in a single u64
+            bit_buf = c_u64[u64_idx] >> bit_idx;
         } else {
+            // Combine the current u64's bits with the bits from the next u64
+            bit_buf = (c_u64[u64_idx] >> bit_idx) | (c_u64[1 + u64_idx] << (64 - bit_idx));
+        }
+
+        // Add the carry into the current window
+        let window_val = carry + (bit_buf & window_mask);
+
+        let u;
+        if window_val & 1 == 0 {
+            // If the window value is even, preserve the carry and emit 0.
+            // Why is the carry preserved?
+            // If carry == 0 and window_val & 1 == 0, then the next carry should be 0
+            // If carry == 1 and window_val & 1 == 0, then bit_buf & 1 == 1 so the next carry should be 1
             u = 0;
+            pos += 1;
+        } else {
+            if window_val < width / 2 {
+                carry = 0;
+                u = window_val as i64;
+            } else {
+                carry = 1;
+                u = (window_val as i64) - (width as i64);
+            }
+
+            pos += window;
         }
 
         wnaf.push(u);
-
-        c.div2();
     }
 }
 
@@ -112,7 +146,7 @@ impl<G: CurveProjective> Wnaf<(), Vec<G>, Vec<i64>> {
     /// exponentiations with `.base(..)`.
     pub fn scalar(
         &mut self,
-        scalar: <<G as CurveProjective>::Scalar as PrimeField>::Repr,
+        scalar: <G as CurveProjective>::Scalar,
     ) -> Wnaf<usize, &mut Vec<G>, &[i64]> {
         // Compute the appropriate window size for the scalar.
         let window_size = G::recommended_wnaf_for_scalar(scalar);
@@ -168,10 +202,7 @@ impl<B, S: AsRef<[i64]>> Wnaf<usize, B, S> {
 
 impl<B, S: AsMut<Vec<i64>>> Wnaf<usize, B, S> {
     /// Performs exponentiation given a scalar.
-    pub fn scalar<G: CurveProjective>(
-        &mut self,
-        scalar: <<G as CurveProjective>::Scalar as PrimeField>::Repr,
-    ) -> G
+    pub fn scalar<G: CurveProjective>(&mut self, scalar: <G as CurveProjective>::Scalar) -> G
     where
         B: AsRef<[G]>,
     {
