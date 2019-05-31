@@ -1,4 +1,4 @@
-use ff::{BitIterator, Field, PrimeField, PrimeFieldRepr, SqrtField};
+use ff::{BitIterator, Field, PrimeField, SqrtField};
 use std::ops::{AddAssign, MulAssign, Neg, SubAssign};
 use subtle::CtOption;
 

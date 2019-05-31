@@ -1,6 +1,5 @@
 #![allow(unused_imports)]
 
-extern crate byteorder;
 extern crate rand;
 extern crate subtle;
 
@@ -11,9 +10,7 @@ extern crate ff_derive;
 #[cfg(feature = "derive")]
 pub use ff_derive::*;
 
-use std::error::Error;
 use std::fmt;
-use std::io::{self, Read, Write};
 use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use subtle::{ConditionallySelectable, CtOption};
 
@@ -123,13 +120,10 @@ pub trait SqrtField: Field {
 }
 
 /// This represents an element of a prime field.
-pub trait PrimeField: Field// + Read + Write
-    // + AsRef<[u64]>
-    // + AsMut<[u64]>
-    + From<u64> {
+pub trait PrimeField: Field + From<u64> {
     /// The prime field can be converted back and forth into this binary
     /// representation.
-    type Repr: AsRef<[u8]> + From<Self> + for<'r> From<&'r Self>;
+    type Repr: Default + AsRef<[u8]> + AsMut<[u8]> + From<Self> + for<'r> From<&'r Self>;
 
     /// Attempts to convert a little-endian byte representation of a field element into an
     /// element of this prime field, failing if the input is not canonical (is not smaller
@@ -175,15 +169,15 @@ pub struct BitIterator<E> {
     n: usize,
 }
 
-impl<E: AsRef<[u64]>> BitIterator<E> {
+impl<E: AsRef<[u8]>> BitIterator<E> {
     pub fn new(t: E) -> Self {
-        let n = t.as_ref().len() * 64;
+        let n = t.as_ref().len() * 8;
 
         BitIterator { t, n }
     }
 }
 
-impl<E: AsRef<[u64]>> Iterator for BitIterator<E> {
+impl<E: AsRef<[u8]>> Iterator for BitIterator<E> {
     type Item = bool;
 
     fn next(&mut self) -> Option<bool> {
@@ -191,8 +185,8 @@ impl<E: AsRef<[u64]>> Iterator for BitIterator<E> {
             None
         } else {
             self.n -= 1;
-            let part = self.n / 64;
-            let bit = self.n - (64 * part);
+            let part = self.n / 8;
+            let bit = self.n - (8 * part);
 
             Some(self.t.as_ref()[part] & (1 << bit) > 0)
         }

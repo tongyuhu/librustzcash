@@ -9,7 +9,6 @@ license = "MIT/Apache-2.0"
 repository = "https://github.com/ebfull/ff"
 
 [dependencies]
-byteorder = "1"
 rand = "0.4"
 ff_derive = { version = "0.3.0", path = "ff_derive", optional = true }
 subtle = "2.1"

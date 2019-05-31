@@ -199,12 +199,11 @@ impl<Node: Hashable> CommitmentTree<Node> {
 /// # Examples
 ///
 /// ```
-/// extern crate pairing;
 /// extern crate rand;
 ///
-/// use pairing::bls12_381::FrRepr;
 /// use rand::{OsRng, Rand};
 /// use zcash_primitives::{
+///     jubjub::Fr,
 ///     merkle_tree::{CommitmentTree, IncrementalWitness},
 ///     sapling::Node,
 /// };
@@ -212,13 +211,13 @@ impl<Node: Hashable> CommitmentTree<Node> {
 /// let mut rng = OsRng::new().unwrap();
 /// let mut tree = CommitmentTree::<Node>::new();
 ///
-/// tree.append(Node::new(FrRepr::rand(&mut rng)));
-/// tree.append(Node::new(FrRepr::rand(&mut rng)));
+/// tree.append(Node::new(Fr::rand(&mut rng)));
+/// tree.append(Node::new(Fr::rand(&mut rng)));
 /// let mut witness = IncrementalWitness::from_tree(&tree);
 /// assert_eq!(witness.position(), 1);
 /// assert_eq!(tree.root(), witness.root());
 ///
-/// let cmu = Node::new(FrRepr::rand(&mut rng));
+/// let cmu = Node::new(Fr::rand(&mut rng));
 /// tree.append(cmu);
 /// witness.append(cmu);
 /// assert_eq!(tree.root(), witness.root());
@@ -507,9 +506,9 @@ mod tests {
     use super::{CommitmentTree, CommitmentTreeWitness, Hashable, IncrementalWitness, PathFiller};
     use sapling::Node;
 
-    use ff::PrimeFieldRepr;
+    use ff::PrimeField;
     use hex;
-    use pairing::bls12_381::FrRepr;
+    use pairing::bls12_381::Fr;
     use std::io::{self, Read, Write};
 
     const HEX_EMPTY_ROOTS: [&str; 33] = [
@@ -1011,11 +1010,10 @@ mod tests {
         let mut paths_i = 0;
         let mut witness_ser_i = 0;
         for i in 0..16 {
-            let mut cm = FrRepr::default();
-            cm.read_le(&hex::decode(commitments[i]).unwrap()[..])
-                .expect("length is 32 bytes");
+            let mut cm = [0; 32];
+            cm.copy_from_slice(&hex::decode(commitments[i]).unwrap()[..]);
 
-            let cm = Node::new(cm);
+            let cm = Node::new(Fr::from_bytes(&cm).unwrap());
 
             // Witness here
             witnesses.push(TestIncrementalWitness::from_tree(&tree));

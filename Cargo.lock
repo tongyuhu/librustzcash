@@ -130,7 +130,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "ff"
 version = "0.4.0"
 dependencies = [
- "byteorder 1.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "ff_derive 0.3.0",
  "rand 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "subtle 2.1.0 (registry+https://github.com/rust-lang/crates.io-index)",

@@ -185,7 +185,7 @@ impl JubjubParams<Bls12> for JubjubBls12 {
 
 impl JubjubBls12 {
     pub fn new() -> Self {
-        let montgomery_a = Fr::from_str("40962").unwrap();
+        let montgomery_a = Fr::from(40962);
         let montgomery_2a = montgomery_a.double();
 
         let mut tmp_params = JubjubBls12 {

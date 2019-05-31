@@ -1,4 +1,5 @@
-use ff::{Field, PrimeField, PrimeFieldRepr};
+use byteorder::{ByteOrder, LittleEndian};
+use ff::{Field, PrimeField};
 use jubjub::*;
 use std::ops::{AddAssign, Neg};
 
@@ -78,20 +79,38 @@ pub fn pedersen_hash<E, I>(
             break;
         }
 
-        let mut table: &[Vec<edwards::Point<E, _>>] = &generators.next().expect("we don't have enough generators");
-        let window = JubjubBls12::pedersen_hash_exp_window_size();
+        let mut table: &[Vec<edwards::Point<E, _>>] =
+            &generators.next().expect("we don't have enough generators");
+        let window = JubjubBls12::pedersen_hash_exp_window_size() as usize;
         let window_mask = (1 << window) - 1;
 
-        let mut acc = acc.into_repr();
-        
+        let acc = acc.to_bytes();
+        let bit_len = acc.as_ref().len() * 8;
+        let u64_len = bit_len / 64;
+
+        let mut acc_u64 = vec![0u64; u64_len + 1];
+        LittleEndian::read_u64_into(acc.as_ref(), &mut acc_u64[0..u64_len]);
+
         let mut tmp = edwards::Point::zero();
 
-        while !acc.is_zero() {
-            let i = (acc.as_ref()[0] & window_mask) as usize;
+        let mut pos = 0;
+        while pos < bit_len {
+            // Construct a buffer of bits of the scalar, starting at bit `pos`
+            let u64_idx = pos / 64;
+            let bit_idx = pos % 64;
+            let bit_buf: u64;
+            if bit_idx < 64 - window {
+                // This window's bits are contained in a single u64
+                bit_buf = acc_u64[u64_idx] >> bit_idx;
+            } else {
+                // Combine the current u64's bits with the bits from the next u64
+                bit_buf = (acc_u64[u64_idx] >> bit_idx) | (acc_u64[1 + u64_idx] << (64 - bit_idx));
+            }
+            let i = (bit_buf & window_mask) as usize;
 
             tmp = tmp.add(&table[0][i], params);
 
-            acc.shr(window);
+            pos += window;
             table = &table[1..];
         }
 

@@ -3,19 +3,15 @@
 use blake2_rfc::blake2b::{Blake2b, Blake2bResult};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use crypto_api_chachapoly::{ChaCha20Ietf, ChachaPolyIetf};
-use ff::{PrimeField, PrimeFieldRepr};
+use ff::PrimeField;
 use pairing::bls12_381::{Bls12, Fr};
 use rand::{OsRng, Rng};
 use std::fmt;
 use std::str;
 
 use crate::{
+    jubjub::{edwards, fs::Fs, PrimeOrder, ToUniform, Unknown},
     keys::OutgoingViewingKey,
-    jubjub::{
-        edwards,
-        fs::{Fs, FsRepr},
-        PrimeOrder, ToUniform, Unknown,
-    },
     primitives::{Diversifier, Note, PaymentAddress},
     JUBJUB,
 };
@@ -195,7 +191,7 @@ fn prf_ock(
     let mut ock_input = [0u8; 128];
     ock_input[0..32].copy_from_slice(&ovk.0);
     cv.write(&mut ock_input[32..64]).unwrap();
-    cmu.into_repr().write_le(&mut ock_input[64..96]).unwrap();
+    ock_input[64..96].copy_from_slice(&cmu.to_bytes());
     epk.write(&mut ock_input[96..128]).unwrap();
 
     let mut h = Blake2b::with_params(32, &[], &[], PRF_OCK_PERSONALIZATION);
@@ -301,7 +297,7 @@ impl SaplingNoteEncryption {
         (&mut input)
             .write_u64::<LittleEndian>(self.note.value)
             .unwrap();
-        self.note.r.into_repr().write_le(&mut input).unwrap();
+        input.extend_from_slice(&self.note.r.to_bytes());
         input.extend_from_slice(&self.memo.0);
         assert_eq!(input.len(), NOTE_PLAINTEXT_SIZE);
 
@@ -326,10 +322,7 @@ impl SaplingNoteEncryption {
 
         let mut buf = [0u8; OUT_CIPHERTEXT_SIZE];
         self.note.pk_d.write(&mut buf[0..32]).unwrap();
-        self.esk
-            .into_repr()
-            .write_le(&mut buf[32..OUT_PLAINTEXT_SIZE])
-            .unwrap();
+        buf[32..OUT_PLAINTEXT_SIZE].copy_from_slice(&self.esk.to_bytes());
 
         assert_eq!(
             ChachaPolyIetf::aead_cipher()
@@ -357,14 +350,18 @@ fn parse_note_plaintext_minus_memo(
 
     let v = (&plaintext[12..20]).read_u64::<LittleEndian>().ok()?;
 
-    let mut rcm = FsRepr::default();
-    rcm.read_le(&plaintext[20..COMPACT_NOTE_SIZE]).ok()?;
-    let rcm = Fs::from_repr(rcm).ok()?;
+    let rcm = {
+        let mut tmp = [0; 32];
+        tmp.copy_from_slice(&plaintext[20..COMPACT_NOTE_SIZE]);
+        let rcm = Fs::from_bytes(&tmp);
+        if rcm.is_none().into() {
+            return None;
+        }
+        rcm.unwrap()
+    };
 
     let diversifier = Diversifier(d);
-    let pk_d = diversifier
-        .g_d::<Bls12>(&JUBJUB)?
-        .mul(ivk.into_repr(), &JUBJUB);
+    let pk_d = diversifier.g_d::<Bls12>(&JUBJUB)?.mul(*ivk, &JUBJUB);
 
     let to = PaymentAddress { pk_d, diversifier };
     let note = to.create_note(v, rcm, &JUBJUB).unwrap();
@@ -489,9 +486,15 @@ pub fn try_sapling_output_recovery(
         .ok()?
         .as_prime_order(&JUBJUB)?;
 
-    let mut esk = FsRepr::default();
-    esk.read_le(&op[32..OUT_PLAINTEXT_SIZE]).ok()?;
-    let esk = Fs::from_repr(esk).ok()?;
+    let esk = {
+        let mut tmp = [0; 32];
+        tmp.copy_from_slice(&op[32..OUT_PLAINTEXT_SIZE]);
+        let esk = Fs::from_bytes(&tmp);
+        if esk.is_none().into() {
+            return None;
+        }
+        esk.unwrap()
+    };
 
     let shared_secret = sapling_ka_agree(&esk, &pk_d);
     let key = kdf_sapling(&shared_secret, &epk);
@@ -515,19 +518,21 @@ pub fn try_sapling_output_recovery(
 
     let v = (&plaintext[12..20]).read_u64::<LittleEndian>().ok()?;
 
-    let mut rcm = FsRepr::default();
-    rcm.read_le(&plaintext[20..COMPACT_NOTE_SIZE]).ok()?;
-    let rcm = Fs::from_repr(rcm).ok()?;
+    let rcm = {
+        let mut tmp = [0; 32];
+        tmp.copy_from_slice(&plaintext[20..COMPACT_NOTE_SIZE]);
+        let rcm = Fs::from_bytes(&tmp);
+        if rcm.is_none().into() {
+            return None;
+        }
+        rcm.unwrap()
+    };
 
     let mut memo = [0u8; 512];
     memo.copy_from_slice(&plaintext[COMPACT_NOTE_SIZE..NOTE_PLAINTEXT_SIZE]);
 
     let diversifier = Diversifier(d);
-    if diversifier
-        .g_d::<Bls12>(&JUBJUB)?
-        .mul(esk.into_repr(), &JUBJUB)
-        != *epk
-    {
+    if diversifier.g_d::<Bls12>(&JUBJUB)?.mul(esk, &JUBJUB) != *epk {
         // Published epk doesn't match calculated epk
         return None;
     }
@@ -545,8 +550,8 @@ pub fn try_sapling_output_recovery(
 
 #[cfg(test)]
 mod tests {
-    use ff::{PrimeField, PrimeFieldRepr};
-    use pairing::bls12_381::{Bls12, Fr, FrRepr};
+    use ff::PrimeField;
+    use pairing::bls12_381::{Bls12, Fr};
     use rand::{thread_rng, Rand, Rng};
 
     use super::{
@@ -555,11 +560,7 @@ mod tests {
         COMPACT_NOTE_SIZE, ENC_CIPHERTEXT_SIZE, OUT_CIPHERTEXT_SIZE,
     };
     use crate::{
-        jubjub::{
-            edwards,
-            fs::{Fs, FsRepr},
-            PrimeOrder, Unknown,
-        },
+        jubjub::{edwards, fs::Fs, PrimeOrder, Unknown},
         keys::OutgoingViewingKey,
         primitives::{Diversifier, PaymentAddress, ValueCommitment},
         JUBJUB,
@@ -970,17 +971,13 @@ mod tests {
 
         macro_rules! read_fr {
             ($field:expr) => {{
-                let mut repr = FrRepr::default();
-                repr.read_le(&$field[..]).unwrap();
-                Fr::from_repr(repr).unwrap()
+                Fr::from_bytes(&$field).unwrap()
             }};
         }
 
         macro_rules! read_fs {
             ($field:expr) => {{
-                let mut repr = FsRepr::default();
-                repr.read_le(&$field[..]).unwrap();
-                Fs::from_repr(repr).unwrap()
+                Fs::from_bytes(&$field).unwrap()
             }};
         }
 

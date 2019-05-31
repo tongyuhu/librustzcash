@@ -1,6 +1,6 @@
 use blake2_rfc::blake2b::Blake2b;
 use byteorder::{LittleEndian, WriteBytesExt};
-use ff::{PrimeField, PrimeFieldRepr};
+use ff::PrimeField;
 
 use super::{
     components::{Amount, TxOut},
@@ -130,7 +130,7 @@ fn shielded_spends_hash(tx: &TransactionData) -> Vec<u8> {
     let mut data = Vec::with_capacity(tx.shielded_spends.len() * 384);
     for s_spend in &tx.shielded_spends {
         s_spend.cv.write(&mut data).unwrap();
-        s_spend.anchor.into_repr().write_le(&mut data).unwrap();
+        data.extend_from_slice(&s_spend.anchor.to_bytes());
         data.extend_from_slice(&s_spend.nullifier);
         s_spend.rk.write(&mut data).unwrap();
         data.extend_from_slice(&s_spend.zkproof);

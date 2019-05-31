@@ -1,5 +1,5 @@
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
-use ff::{PrimeField, PrimeFieldRepr};
+use ff::PrimeField;
 use pairing::bls12_381::{Bls12, Fr, FrRepr};
 use std::io::{self, Read, Write};
 
@@ -155,9 +155,16 @@ impl SpendDescription {
 
         // Consensus rule (§7.3): Canonical encoding is enforced here
         let anchor = {
-            let mut f = FrRepr::default();
-            f.read_le(&mut reader)?;
-            Fr::from_repr(f).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?
+            let mut repr = [0; 32];
+            reader.read_exact(&mut repr)?;
+            let anchor = Fr::from_bytes(&repr);
+            if anchor.is_none().into() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "Invalid anchor",
+                ));
+            }
+            anchor.unwrap()
         };
 
         let mut nullifier = [0; 32];
@@ -192,7 +199,7 @@ impl SpendDescription {
 
     pub fn write<W: Write>(&self, mut writer: W) -> io::Result<()> {
         self.cv.write(&mut writer)?;
-        self.anchor.into_repr().write_le(&mut writer)?;
+        writer.write_all(&self.anchor.to_bytes())?;
         writer.write_all(&self.nullifier)?;
         self.rk.write(&mut writer)?;
         writer.write_all(&self.zkproof)?;
@@ -237,9 +244,13 @@ impl OutputDescription {
 
         // Consensus rule (§7.4): Canonical encoding is enforced here
         let cmu = {
-            let mut f = FrRepr::default();
-            f.read_le(&mut reader)?;
-            Fr::from_repr(f).map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?
+            let mut repr = [0; 32];
+            reader.read_exact(&mut repr)?;
+            let cmu = Fr::from_bytes(&repr);
+            if cmu.is_none().into() {
+                return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid cmu"));
+            }
+            cmu.unwrap()
         };
 
         // Consensus rules (§4.5):
@@ -271,7 +282,7 @@ impl OutputDescription {
 
     pub fn write<W: Write>(&self, mut writer: W) -> io::Result<()> {
         self.cv.write(&mut writer)?;
-        self.cmu.into_repr().write_le(&mut writer)?;
+        writer.write_all(&self.cmu.to_bytes())?;
         self.ephemeral_key.write(&mut writer)?;
         writer.write_all(&self.enc_ciphertext)?;
         writer.write_all(&self.out_ciphertext)?;

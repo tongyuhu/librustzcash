@@ -1,7 +1,7 @@
 //! Structs and constants specific to the Sapling shielded pool.
 
-use ff::{BitIterator, PrimeField, PrimeFieldRepr};
-use pairing::bls12_381::{Bls12, Fr, FrRepr};
+use ff::{BitIterator, PrimeField};
+use pairing::bls12_381::{Bls12, Fr};
 use rand::OsRng;
 use std::io::{self, Read, Write};
 
@@ -17,10 +17,10 @@ use JUBJUB;
 pub const SAPLING_COMMITMENT_TREE_DEPTH: usize = 32;
 
 /// Compute a parent node in the Sapling commitment tree given its two children.
-pub fn merkle_hash(depth: usize, lhs: &FrRepr, rhs: &FrRepr) -> FrRepr {
+pub fn merkle_hash(depth: usize, lhs: &Fr, rhs: &Fr) -> Fr {
     let lhs = {
         let mut tmp = [false; 256];
-        for (a, b) in tmp.iter_mut().rev().zip(BitIterator::new(lhs)) {
+        for (a, b) in tmp.iter_mut().rev().zip(BitIterator::new(lhs.to_bytes())) {
             *a = b;
         }
         tmp
@@ -28,7 +28,7 @@ pub fn merkle_hash(depth: usize, lhs: &FrRepr, rhs: &FrRepr) -> FrRepr {
 
     let rhs = {
         let mut tmp = [false; 256];
-        for (a, b) in tmp.iter_mut().rev().zip(BitIterator::new(rhs)) {
+        for (a, b) in tmp.iter_mut().rev().zip(BitIterator::new(rhs.to_bytes())) {
             *a = b;
         }
         tmp
@@ -44,30 +44,33 @@ pub fn merkle_hash(depth: usize, lhs: &FrRepr, rhs: &FrRepr) -> FrRepr {
     )
     .into_xy()
     .0
-    .into_repr()
 }
 
 /// A node within the Sapling commitment tree.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Node {
-    repr: FrRepr,
+    repr: Fr,
 }
 
 impl Node {
-    pub fn new(repr: FrRepr) -> Self {
+    pub fn new(repr: Fr) -> Self {
         Node { repr }
     }
 }
 
 impl Hashable for Node {
     fn read<R: Read>(mut reader: R) -> io::Result<Self> {
-        let mut repr = FrRepr::default();
-        repr.read_le(&mut reader)?;
-        Ok(Node::new(repr))
+        let mut repr = [0; 32];
+        reader.read_exact(&mut repr)?;
+        let node = Fr::from_bytes(&repr);
+        if node.is_none().into() {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid node"));
+        }
+        Ok(Node::new(node.unwrap()))
     }
 
     fn write<W: Write>(&self, mut writer: W) -> io::Result<()> {
-        self.repr.write_le(&mut writer)
+        writer.write_all(&self.repr.to_bytes())
     }
 
     fn combine(depth: usize, lhs: &Self, rhs: &Self) -> Self {
@@ -78,7 +81,7 @@ impl Hashable for Node {
 
     fn blank() -> Self {
         Node {
-            repr: Note::<Bls12>::uncommitted().into_repr(),
+            repr: Note::<Bls12>::uncommitted(),
         }
     }
 
@@ -89,7 +92,7 @@ impl Hashable for Node {
 
 impl From<Node> for Fr {
     fn from(node: Node) -> Self {
-        Fr::from_repr(node.repr).expect("Tree nodes should be in the prime field")
+        node.repr
     }
 }
 

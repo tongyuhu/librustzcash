@@ -9,7 +9,6 @@ use super::{
 use ff::{
     Field,
     PrimeField,
-    PrimeFieldRepr,
     SqrtField,
 };
 use std::ops::{AddAssign, MulAssign, Neg, SubAssign};
@@ -340,14 +339,14 @@ fn test_jubjub_params<E: JubjubEngine>(params: &E::Params) {
     {
         // Check that A^2 - 4 is nonsquare:
         let mut tmp = params.montgomery_a().square();
-        tmp.sub_assign(&E::Fr::from_str("4").unwrap());
+        tmp.sub_assign(&E::Fr::from(4));
         assert!(bool::from(tmp.sqrt().is_none()));
     }
 
     {
         // Check that A - 2 is nonsquare:
         let mut tmp = params.montgomery_a().clone();
-        tmp.sub_assign(&E::Fr::from_str("2").unwrap());
+        tmp.sub_assign(&E::Fr::from(2));
         assert!(bool::from(tmp.sqrt().is_none()));
     }
 
@@ -356,7 +355,7 @@ fn test_jubjub_params<E: JubjubEngine>(params: &E::Params) {
         let mut tmp = a;
         tmp.sub_assign(&params.edwards_d());
         tmp = tmp.invert().unwrap();
-        tmp.mul_assign(&E::Fr::from_str("4").unwrap());
+        tmp.mul_assign(&E::Fr::from(4));
         tmp = tmp.sqrt().unwrap();
         assert_eq!(&tmp, params.scale());
     }

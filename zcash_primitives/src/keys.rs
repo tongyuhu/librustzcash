@@ -1,7 +1,7 @@
 //! Sapling key components
 
 use blake2_rfc::blake2b::{Blake2b, Blake2bResult};
-use ff::{PrimeField, PrimeFieldRepr};
+use ff::PrimeField;
 use std::io::{self, Read, Write};
 
 use crate::{
@@ -64,14 +64,20 @@ impl<E: JubjubEngine> ExpandedSpendingKey<E> {
 
     pub fn read<R: Read>(mut reader: R) -> io::Result<Self> {
         let mut ask_repr = <E::Fs as PrimeField>::Repr::default();
-        ask_repr.read_le(&mut reader)?;
-        let ask = E::Fs::from_repr(ask_repr)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        reader.read_exact(ask_repr.as_mut())?;
+        let ask = E::Fs::from_bytes(&ask_repr);
+        if ask.is_none().into() {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid scalar"));
+        }
+        let ask = ask.unwrap();
 
         let mut nsk_repr = <E::Fs as PrimeField>::Repr::default();
-        nsk_repr.read_le(&mut reader)?;
-        let nsk = E::Fs::from_repr(nsk_repr)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        reader.read_exact(nsk_repr.as_mut())?;
+        let nsk = E::Fs::from_bytes(&nsk_repr);
+        if nsk.is_none().into() {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "Invalid scalar"));
+        }
+        let nsk = nsk.unwrap();
 
         let mut ovk = [0; 32];
         reader.read_exact(&mut ovk)?;
@@ -84,8 +90,8 @@ impl<E: JubjubEngine> ExpandedSpendingKey<E> {
     }
 
     pub fn write<W: Write>(&self, mut writer: W) -> io::Result<()> {
-        self.ask.into_repr().write_le(&mut writer)?;
-        self.nsk.into_repr().write_le(&mut writer)?;
+        writer.write_all(self.ask.to_bytes().as_ref())?;
+        writer.write_all(self.nsk.to_bytes().as_ref())?;
         writer.write_all(&self.ovk.0)?;
 
         Ok(())
