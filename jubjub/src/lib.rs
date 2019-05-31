@@ -35,8 +35,11 @@
 #[macro_use]
 extern crate std;
 
+use core::fmt;
 use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
-use ff::{Field, PrimeField, SqrtField};
+use ff::{Field, PrimeField, ScalarEngine, SqrtField};
+use group::{CurveAffine, CurveProjective, EncodedPoint};
+use rand::{Rand, Rng};
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 
 #[macro_use]
@@ -52,12 +55,26 @@ const FR_MODULUS_BYTES: [u8; 32] = [
     103, 6, 169, 175, 51, 101, 234, 180, 125, 14,
 ];
 
+/// TBD
+#[derive(Clone, Debug)]
+pub struct Jubjub;
+
+impl ScalarEngine for Jubjub {
+    type Fr = Fr;
+}
+
 /// This represents a Jubjub point in the affine `(u, v)`
 /// coordinates.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq)]
 pub struct AffinePoint {
     u: Fq,
     v: Fq,
+}
+
+impl fmt::Display for AffinePoint {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "AffinePoint({}, {})", self.u, self.v)
+    }
 }
 
 impl Neg for AffinePoint {
@@ -106,13 +123,23 @@ impl ConditionallySelectable for AffinePoint {
 /// * Add it to an `ExtendedPoint`, `AffineNielsPoint` or `ExtendedNielsPoint`.
 /// * Double it using `double()`.
 /// * Compare it with another extended point using `PartialEq` or `ct_eq()`.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq)]
 pub struct ExtendedPoint {
     u: Fq,
     v: Fq,
     z: Fq,
     t1: Fq,
     t2: Fq,
+}
+
+impl fmt::Display for ExtendedPoint {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "ExtendedPoint({}, {}, {}, {}, {})",
+            self.u, self.v, self.z, self.t1, self.t2
+        )
+    }
 }
 
 impl ConstantTimeEq for ExtendedPoint {
@@ -142,6 +169,24 @@ impl ConditionallySelectable for ExtendedPoint {
 impl PartialEq for ExtendedPoint {
     fn eq(&self, other: &Self) -> bool {
         self.ct_eq(other).unwrap_u8() == 1
+    }
+}
+
+impl Rand for ExtendedPoint {
+    fn rand<R: Rng>(rng: &mut R) -> Self {
+        let mut x = CompressedJubjubPoint([0; 32]);
+        loop {
+            rng.fill_bytes(&mut x.0);
+
+            let p = x.into_affine();
+            if p.is_some().into() {
+                let p = p.unwrap().mul_by_cofactor();
+
+                if !p.is_zero() {
+                    return p;
+                }
+            }
+        }
     }
 }
 
@@ -397,23 +442,56 @@ impl AffinePoint {
         let extended = ExtendedPoint::from(*self);
         extended.is_torsion_free() & (!extended.is_identity())
     }
+}
 
-    /// Converts this element into its byte representation.
-    pub fn to_bytes(&self) -> [u8; 32] {
-        let mut tmp = self.v.to_bytes();
-        let u = self.u.to_bytes();
+/// A compressed Jubjub point.
+#[derive(Clone, Copy, Debug)]
+pub struct CompressedJubjubPoint([u8; 32]);
+
+impl AsRef<[u8]> for CompressedJubjubPoint {
+    #[inline(always)]
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl AsMut<[u8]> for CompressedJubjubPoint {
+    #[inline(always)]
+    fn as_mut(&mut self) -> &mut [u8] {
+        &mut self.0
+    }
+}
+
+impl EncodedPoint for CompressedJubjubPoint {
+    type Affine = AffinePoint;
+
+    /// Creates an empty representation.
+    fn empty() -> Self {
+        CompressedJubjubPoint([0; 32])
+    }
+
+    /// Returns the number of bytes consumed by this representation.
+    fn size() -> usize {
+        32
+    }
+
+    /// Creates an `EncodedPoint` from an affine point, as long as the
+    /// point is not the point at infinity.
+    fn from_affine(affine: Self::Affine) -> Self {
+        let mut tmp = affine.get_v().to_bytes();
+        let u = affine.get_u().to_bytes();
 
         // Encode the sign of the u-coordinate in the most
         // significant bit.
         tmp[31] |= u[0] << 7;
 
-        tmp
+        CompressedJubjubPoint(tmp)
     }
 
-    /// Attempts to interpret a byte representation of an
-    /// affine point, failing if the element is not on
-    /// the curve or non-canonical.
-    pub fn from_bytes(mut b: [u8; 32]) -> CtOption<Self> {
+    /// Converts an `EncodedPoint` into a `CurveAffine` element,
+    /// if the encoding represents a valid element.
+    fn into_affine(&self) -> CtOption<Self::Affine> {
+        let mut b = self.0;
         // Grab the sign bit from the representation
         let sign = b[31] >> 7;
 
@@ -447,17 +525,52 @@ impl AffinePoint {
                 })
         })
     }
+}
+
+impl CurveAffine for AffinePoint {
+    type Engine = Jubjub;
+    type Scalar = Fr;
+    type Base = Fq;
+    type Projective = ExtendedPoint;
+    // type Uncompressed: EncodedPoint<Affine = Self>;
+    type Compressed = CompressedJubjubPoint;
+
+    /// Returns the additive identity.
+    fn zero() -> Self {
+        AffinePoint::identity()
+    }
+
+    // /// Returns a fixed generator of unknown exponent.
+    // fn one() -> Self {}
+
+    /// Determines if this point represents the point at infinity; the
+    /// additive identity.
+    fn is_zero(&self) -> bool {
+        self.ct_eq(&Self::zero()).into()
+    }
+
+    /// Performs scalar multiplication of this element with mixed addition.
+    fn mul(&self, other: Self::Scalar) -> Self::Projective {
+        self.into_projective() * other
+    }
+
+    /// Converts this element into its affine representation.
+    fn into_projective(&self) -> Self::Projective {
+        ExtendedPoint::from(*self)
+    }
 
     /// Returns the `u`-coordinate of this point.
-    pub fn get_u(&self) -> Fq {
+    fn get_u(&self) -> Fq {
         self.u
     }
 
     /// Returns the `v`-coordinate of this point.
-    pub fn get_v(&self) -> Fq {
+    fn get_v(&self) -> Fq {
         self.v
     }
+}
 
+impl AffinePoint {
     /// Performs a pre-processing step that produces an `AffineNielsPoint`
     /// for use in multiple additions.
     pub const fn to_niels(&self) -> AffineNielsPoint {
@@ -521,14 +634,6 @@ impl ExtendedPoint {
         self.multiply(&FR_MODULUS_BYTES).is_identity()
     }
 
-    /// Determines if this point is prime order, or in other words that
-    /// the smallest scalar multiplied by this point that produces the
-    /// identity is `r`. This is equivalent to checking that the point
-    /// is both torsion free and not the identity.
-    pub fn is_prime_order(&self) -> Choice {
-        self.is_torsion_free() & (!self.is_identity())
-    }
-
     /// Multiplies this element by the cofactor `8`.
     pub fn mul_by_cofactor(&self) -> ExtendedPoint {
         self.double().double().double()
@@ -544,10 +649,46 @@ impl ExtendedPoint {
             t2d: &self.t1 * &self.t2 * EDWARDS_D2,
         }
     }
+}
+
+impl CurveProjective for ExtendedPoint {
+    type Engine = Jubjub;
+    type Scalar = Fr;
+    type Base = Fq;
+    type Affine = AffinePoint;
+
+    /// Returns the additive identity.
+    fn zero() -> Self {
+        ExtendedPoint::identity()
+    }
+
+    // /// Returns a fixed generator of unknown exponent.
+    // fn one() -> Self {}
+
+    /// Determines if this point is the point at infinity.
+    fn is_zero(&self) -> bool {
+        self.ct_eq(&Self::zero()).into()
+    }
+
+    /// Determines if this point is prime order, or in other words that
+    /// the smallest scalar multiplied by this point that produces the
+    /// identity is `r`. This is equivalent to checking that the point
+    /// is both torsion free and not the identity.
+    fn is_prime_order(&self) -> Choice {
+        self.is_torsion_free() & (!self.is_identity())
+    }
+
+    // /// Normalizes a slice of projective elements so that
+    // /// conversion to affine is cheap.
+    // fn batch_normalization(v: &mut [Self]) {}
+
+    // /// Checks if the point is already "normalized" so that
+    // /// cheap affine conversion is possible.
+    // fn is_normalized(&self) -> bool {}
 
     /// Computes the doubling of a point more efficiently than a point can
     /// be added to itself.
-    pub fn double(&self) -> ExtendedPoint {
+    fn double(&self) -> ExtendedPoint {
         // Doubling is more efficient (three multiplications, four squarings)
         // when we work within the projective coordinate space (U:Z, V:Z). We
         // rely on the most efficient formula, "dbl-2008-bbjlp", as described
@@ -638,6 +779,33 @@ impl ExtendedPoint {
         .into_extended()
     }
 
+    /// Adds an affine element to this element.
+    fn add_assign_mixed(&mut self, other: &Self::Affine) {
+        self.add_assign(other)
+    }
+
+    /// Performs scalar multiplication of this element.
+    fn mul_assign(&mut self, other: Self::Scalar) {
+        MulAssign::mul_assign(self, other);
+    }
+
+    /// Converts this element into its affine representation.
+    fn into_affine(&self) -> Self::Affine {
+        AffinePoint::from(*self)
+    }
+
+    // /// Recommends a wNAF window table size given a scalar. Always returns a number
+    // /// between 2 and 22, inclusive.
+    // fn recommended_wnaf_for_scalar(scalar: Self::Scalar) -> usize {
+    // }
+
+    // /// Recommends a wNAF window size given the number of scalars you intend to multiply
+    // /// a base by. Always returns a number between 2 and 22, inclusive.
+    // fn recommended_wnaf_for_num_scalars(num_scalars: usize) -> usize {
+    // }
+}
+
+impl ExtendedPoint {
     #[inline]
     fn multiply(self, by: &[u8; 32]) -> Self {
         self.to_niels().multiply(by)
@@ -1135,9 +1303,9 @@ fn find_eight_torsion() {
 
 #[test]
 fn find_curve_generator() {
-    let mut trial_bytes = [0; 32];
+    let mut trial_bytes = CompressedJubjubPoint([0; 32]);
     for _ in 0..255 {
-        let a = AffinePoint::from_bytes(trial_bytes);
+        let a = trial_bytes.into_affine();
         if a.is_some().unwrap_u8() == 1 {
             let a = a.unwrap();
             assert!(a.is_on_curve_vartime());
@@ -1158,7 +1326,7 @@ fn find_curve_generator() {
             }
         }
 
-        trial_bytes[0] += 1;
+        trial_bytes.0[0] += 1;
     }
 
     panic!("should have found a generator of the curve");
@@ -1315,10 +1483,10 @@ fn test_serialization_consistency() {
     for expected_serialized in v {
         assert!(p.is_on_curve_vartime());
         let affine = AffinePoint::from(p);
-        let serialized = affine.to_bytes();
-        let deserialized = AffinePoint::from_bytes(serialized).unwrap();
+        let serialized = affine.into_compressed();
+        let deserialized = serialized.into_affine().unwrap();
         assert_eq!(affine, deserialized);
-        assert_eq!(expected_serialized, serialized);
+        assert_eq!(expected_serialized, serialized.0);
         p = p + &gen;
     }
 }

@@ -181,7 +181,6 @@ const GENERATOR: Fq = Fq([
     0x351332208fc5a8c4,
 ]);
 
-
 const S: u32 = 32;
 
 /// GENERATOR^t where t * 2^s + 1 = q

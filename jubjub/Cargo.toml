@@ -15,6 +15,7 @@ edition = "2018"
 
 [dependencies]
 ff = { path = "../ff" }
+group = { path = "../group" }
 rand = { version = "0.4", default-features = false }
 
 [dependencies.byteorder]
