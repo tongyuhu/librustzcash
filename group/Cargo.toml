@@ -16,3 +16,4 @@ repository = "https://github.com/ebfull/group"
 byteorder = "1"
 ff = { path = "../ff" }
 rand = "0.4"
+subtle = "2.1"
