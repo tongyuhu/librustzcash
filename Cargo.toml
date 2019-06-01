@@ -5,7 +5,7 @@ members = [
     "group",
     "jubjub",
     # "librustzcash",
-    "pairing",
+    # "pairing",
     # "zcash_client_backend",
     # "zcash_client_sqlite",
     "zcash_primitives",

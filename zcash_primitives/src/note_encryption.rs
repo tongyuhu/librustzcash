@@ -4,13 +4,12 @@ use blake2_rfc::blake2b::{Blake2b, Blake2bResult};
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use crypto_api_chachapoly::{ChaCha20Ietf, ChachaPolyIetf};
 use ff::PrimeField;
-use pairing::bls12_381::{Bls12, Fr};
 use rand::{OsRng, Rng};
 use std::fmt;
 use std::str;
 
 use crate::{
-    jubjub::{edwards, fs::Fs, PrimeOrder, ToUniform, Unknown},
+    jubjub::{edwards, fs::Fs, Bls12, Fr, PrimeOrder, ToUniform, Unknown},
     keys::OutgoingViewingKey,
     primitives::{Diversifier, Note, PaymentAddress},
     JUBJUB,
@@ -210,13 +209,11 @@ fn prf_ock(
 /// # Examples
 ///
 /// ```
-/// extern crate pairing;
 /// extern crate rand;
 ///
-/// use pairing::bls12_381::Bls12;
 /// use rand::{OsRng, Rand};
 /// use zcash_primitives::{
-///     jubjub::fs::Fs,
+///     jubjub::{fs::Fs, Bls12},
 ///     keys::OutgoingViewingKey,
 ///     note_encryption::{Memo, SaplingNoteEncryption},
 ///     primitives::{Diversifier, PaymentAddress, ValueCommitment},
@@ -551,7 +548,6 @@ pub fn try_sapling_output_recovery(
 #[cfg(test)]
 mod tests {
     use ff::PrimeField;
-    use pairing::bls12_381::{Bls12, Fr};
     use rand::{thread_rng, Rand, Rng};
 
     use super::{
@@ -560,7 +556,7 @@ mod tests {
         COMPACT_NOTE_SIZE, ENC_CIPHERTEXT_SIZE, OUT_CIPHERTEXT_SIZE,
     };
     use crate::{
-        jubjub::{edwards, fs::Fs, PrimeOrder, Unknown},
+        jubjub::{edwards, fs::Fs, Bls12, Fr, PrimeOrder, Unknown},
         keys::OutgoingViewingKey,
         primitives::{Diversifier, PaymentAddress, ValueCommitment},
         JUBJUB,

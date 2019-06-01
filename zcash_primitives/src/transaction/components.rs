@@ -1,9 +1,8 @@
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use ff::PrimeField;
-use pairing::bls12_381::{Bls12, Fr, FrRepr};
 use std::io::{self, Read, Write};
 
-use crate::jubjub::{edwards, Unknown};
+use crate::jubjub::{edwards, Bls12, Fr, Unknown};
 use legacy::Script;
 use redjubjub::{PublicKey, Signature};
 use JUBJUB;

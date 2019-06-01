@@ -504,11 +504,11 @@ impl<Node: Hashable> CommitmentTreeWitness<Node> {
 #[cfg(test)]
 mod tests {
     use super::{CommitmentTree, CommitmentTreeWitness, Hashable, IncrementalWitness, PathFiller};
+    use jubjub::Fr;
     use sapling::Node;
 
     use ff::PrimeField;
     use hex;
-    use pairing::bls12_381::Fr;
     use std::io::{self, Read, Write};
 
     const HEX_EMPTY_ROOTS: [&str; 33] = [

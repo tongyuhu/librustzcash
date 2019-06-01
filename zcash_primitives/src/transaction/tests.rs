@@ -1,8 +1,7 @@
-use pairing::bls12_381::Bls12;
 use rand::{thread_rng, Rng};
 
 use super::{components::Amount, sighash::signature_hash, Transaction, TransactionData};
-use crate::jubjub::FixedGenerators;
+use crate::jubjub::{Bls12, FixedGenerators};
 use legacy::Script;
 use redjubjub::PrivateKey;
 use JUBJUB;

@@ -1,11 +1,10 @@
 //! Structs for building transactions.
 
-use pairing::bls12_381::{Bls12, Fr};
 use rand::{OsRng, Rand, Rng};
 use zip32::ExtendedSpendingKey;
 
 use crate::{
-    jubjub::fs::Fs,
+    jubjub::{fs::Fs, Bls12, Fr},
     keys::OutgoingViewingKey,
     legacy::TransparentAddress,
     merkle_tree::{CommitmentTreeWitness, IncrementalWitness},
@@ -497,7 +496,6 @@ impl Builder {
 
 #[cfg(test)]
 mod tests {
-    use ff::PrimeField;
     use rand::{OsRng, Rand};
 
     use super::{Builder, ErrorKind};
