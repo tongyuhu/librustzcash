@@ -1,7 +1,7 @@
 //! Structs for building transactions.
 
+use keys::ExpandedSpendingKey;
 use rand::{OsRng, Rand, Rng};
-use zip32::ExtendedSpendingKey;
 
 use crate::{
     jubjub::{fs::Fs, Bls12, Fr},
@@ -49,7 +49,7 @@ pub enum ErrorKind {
 }
 
 struct SpendDescriptionInfo {
-    extsk: ExtendedSpendingKey,
+    expsk: ExpandedSpendingKey<Bls12>,
     diversifier: Diversifier,
     note: Note<Bls12>,
     alpha: Fs,
@@ -160,7 +160,7 @@ impl<R: Rng> Builder<R> {
     /// witnesses, or has no path.
     pub fn add_sapling_spend(
         &mut self,
-        extsk: ExtendedSpendingKey,
+        expsk: ExpandedSpendingKey<Bls12>,
         diversifier: Diversifier,
         note: Note<Bls12>,
         witness: IncrementalWitness<Node>,
@@ -181,7 +181,7 @@ impl<R: Rng> Builder<R> {
         self.mtx.value_balance.0 += note.value as i64;
 
         self.spends.push(SpendDescriptionInfo {
-            extsk,
+            expsk,
             diversifier,
             note,
             alpha,
@@ -297,7 +297,7 @@ impl<R: Rng> Builder<R> {
                 change_address
             } else if !self.spends.is_empty() {
                 (
-                    self.spends[0].extsk.expsk.ovk,
+                    self.spends[0].expsk.ovk,
                     PaymentAddress {
                         diversifier: self.spends[0].diversifier,
                         pk_d: self.spends[0].note.pk_d.clone(),
@@ -344,7 +344,7 @@ impl<R: Rng> Builder<R> {
 
         // Create Sapling SpendDescriptions
         for (i, (pos, spend)) in spends.iter().enumerate() {
-            let proof_generation_key = spend.extsk.expsk.proof_generation_key(&JUBJUB);
+            let proof_generation_key = spend.expsk.proof_generation_key(&JUBJUB);
 
             let mut nullifier = [0u8; 32];
             nullifier.copy_from_slice(&spend.note.nf(
@@ -494,7 +494,7 @@ impl<R: Rng> Builder<R> {
         // Create Sapling spendAuth and binding signatures
         for (i, (_, spend)) in spends.into_iter().enumerate() {
             self.mtx.shielded_spends[i].spend_auth_sig = Some(spend_sig(
-                PrivateKey(spend.extsk.expsk.ask),
+                PrivateKey(spend.expsk.ask),
                 spend.alpha,
                 &sighash,
                 &mut self.rng,
@@ -612,7 +612,7 @@ mod tests {
             let mut builder = Builder::new(0);
             builder
                 .add_sapling_spend(
-                    extsk.clone(),
+                    extsk.expsk.clone(),
                     to.diversifier,
                     note1.clone(),
                     witness1.clone(),
@@ -644,10 +644,10 @@ mod tests {
         {
             let mut builder = Builder::new(0);
             builder
-                .add_sapling_spend(extsk.clone(), to.diversifier, note1, witness1)
+                .add_sapling_spend(extsk.expsk.clone(), to.diversifier, note1, witness1)
                 .unwrap();
             builder
-                .add_sapling_spend(extsk, to.diversifier, note2, witness2)
+                .add_sapling_spend(extsk.expsk, to.diversifier, note2, witness2)
                 .unwrap();
             builder
                 .add_sapling_output(ovk, to, Amount(30000), None)
