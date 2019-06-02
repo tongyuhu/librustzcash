@@ -1,4 +1,3 @@
-use hex;
 use sha2::{Digest, Sha256};
 use std::fmt;
 use std::io::{self, Read, Write};
@@ -27,10 +26,11 @@ const SAPLING_TX_VERSION: u32 = 4;
 pub struct TxId(pub [u8; 32]);
 
 impl fmt::Display for TxId {
-    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        let mut data = self.0.clone();
-        data.reverse();
-        formatter.write_str(&hex::encode(data))
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for &b in self.0.iter().rev() {
+            write!(f, "{:02x}", b)?;
+        }
+        Ok(())
     }
 }
 

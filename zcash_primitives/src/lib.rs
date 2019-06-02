@@ -8,11 +8,13 @@ extern crate crypto_api_chachapoly;
 extern crate ff;
 extern crate fpe;
 extern crate group;
-extern crate hex;
 extern crate jubjub as new_jubjub;
 extern crate rand;
 extern crate sha2;
 extern crate subtle;
+
+#[cfg(test)]
+extern crate hex;
 
 #[cfg(test)]
 #[macro_use]

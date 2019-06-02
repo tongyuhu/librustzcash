@@ -1,4 +1,3 @@
-use hex;
 use sha2::{Digest, Sha256};
 use std::fmt;
 use std::io::{self, Read, Write};
@@ -10,10 +9,11 @@ use serialize::Vector;
 pub struct BlockHash(pub [u8; 32]);
 
 impl fmt::Display for BlockHash {
-    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        let mut data = self.0.clone();
-        data.reverse();
-        formatter.write_str(&hex::encode(data))
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for &b in self.0.iter().rev() {
+            write!(f, "{:02x}", b)?;
+        }
+        Ok(())
     }
 }
 
