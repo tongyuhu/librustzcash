@@ -1,7 +1,6 @@
 //! Implementation of in-band secret distribution for Zcash transactions.
 
 use blake2_rfc::blake2b::{Blake2b, Blake2bResult};
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use crypto_api_chachapoly::{ChaCha20Ietf, ChachaPolyIetf};
 use ff::PrimeField;
 use rand::{OsRng, Rng};
@@ -291,9 +290,7 @@ impl SaplingNoteEncryption {
         let mut input = Vec::with_capacity(NOTE_PLAINTEXT_SIZE);
         input.push(1);
         input.extend_from_slice(&self.to.diversifier.0);
-        (&mut input)
-            .write_u64::<LittleEndian>(self.note.value)
-            .unwrap();
+        input.extend_from_slice(&self.note.value.to_le_bytes());
         input.extend_from_slice(&self.note.r.to_bytes());
         input.extend_from_slice(&self.memo.0);
         assert_eq!(input.len(), NOTE_PLAINTEXT_SIZE);
@@ -345,7 +342,11 @@ fn parse_note_plaintext_minus_memo(
     let mut d = [0u8; 11];
     d.copy_from_slice(&plaintext[1..12]);
 
-    let v = (&plaintext[12..20]).read_u64::<LittleEndian>().ok()?;
+    let v = {
+        let mut tmp = [0; 8];
+        tmp.copy_from_slice(&plaintext[12..20]);
+        u64::from_le_bytes(tmp)
+    };
 
     let rcm = {
         let mut tmp = [0; 32];
@@ -513,7 +514,11 @@ pub fn try_sapling_output_recovery(
     let mut d = [0u8; 11];
     d.copy_from_slice(&plaintext[1..12]);
 
-    let v = (&plaintext[12..20]).read_u64::<LittleEndian>().ok()?;
+    let v = {
+        let mut tmp = [0; 8];
+        tmp.copy_from_slice(&plaintext[12..20]);
+        u64::from_le_bytes(tmp)
+    };
 
     let rcm = {
         let mut tmp = [0; 32];

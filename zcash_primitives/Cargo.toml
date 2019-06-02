@@ -8,7 +8,7 @@ authors = [
 
 [dependencies]
 aes = "0.2"
-byteorder = "1"
+byteorder = { version = "1", default-features = false }
 crypto_api_chachapoly = "0.1"
 ff = { path = "../ff" }
 fpe = "0.1"

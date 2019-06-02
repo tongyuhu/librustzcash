@@ -1,6 +1,5 @@
 use aes::Aes256;
 use blake2_rfc::blake2b::Blake2b;
-use byteorder::{ByteOrder, LittleEndian, ReadBytesExt, WriteBytesExt};
 use fpe::ff1::{BinaryNumeralString, FF1};
 use std::io::{self, Read, Write};
 use std::ops::AddAssign;
@@ -241,10 +240,18 @@ impl ExtendedSpendingKey {
     }
 
     pub fn read<R: Read>(mut reader: R) -> io::Result<Self> {
-        let depth = reader.read_u8()?;
+        let depth = {
+            let mut tmp = [0; 1];
+            reader.read_exact(&mut tmp)?;
+            tmp[0]
+        };
         let mut tag = [0; 4];
         reader.read_exact(&mut tag)?;
-        let i = reader.read_u32::<LittleEndian>()?;
+        let i = {
+            let mut tmp = [0; 4];
+            reader.read_exact(&mut tmp)?;
+            u32::from_le_bytes(tmp)
+        };
         let mut c = [0; 32];
         reader.read_exact(&mut c)?;
         let expsk = ExpandedSpendingKey::read(&mut reader)?;
@@ -262,9 +269,9 @@ impl ExtendedSpendingKey {
     }
 
     pub fn write<W: Write>(&self, mut writer: W) -> io::Result<()> {
-        writer.write_u8(self.depth)?;
+        writer.write_all(&[self.depth])?;
         writer.write_all(&self.parent_fvk_tag.0)?;
-        writer.write_u32::<LittleEndian>(self.child_index.to_index())?;
+        writer.write_all(&self.child_index.to_index().to_le_bytes())?;
         writer.write_all(&self.chain_code.0)?;
         writer.write_all(&self.expsk.to_bytes())?;
         writer.write_all(&self.dk.0)?;
@@ -285,16 +292,14 @@ impl ExtendedSpendingKey {
         let fvk = FullViewingKey::from_expanded_spending_key(&self.expsk, &JUBJUB);
         let tmp = match i {
             ChildIndex::Hardened(i) => {
-                let mut le_i = [0; 4];
-                LittleEndian::write_u32(&mut le_i, i + (1 << 31));
+                let le_i = u32::from(i + (1 << 31)).to_le_bytes();
                 prf_expand_vec(
                     &self.chain_code.0,
                     &[&[0x11], &self.expsk.to_bytes(), &self.dk.0, &le_i],
                 )
             }
             ChildIndex::NonHardened(i) => {
-                let mut le_i = [0; 4];
-                LittleEndian::write_u32(&mut le_i, i);
+                let le_i = u32::from(i).to_le_bytes();
                 prf_expand_vec(
                     &self.chain_code.0,
                     &[&[0x12], &fvk.to_bytes(), &self.dk.0, &le_i],
@@ -342,10 +347,18 @@ impl<'a> From<&'a ExtendedSpendingKey> for ExtendedFullViewingKey {
 
 impl ExtendedFullViewingKey {
     pub fn read<R: Read>(mut reader: R) -> io::Result<Self> {
-        let depth = reader.read_u8()?;
+        let depth = {
+            let mut tmp = [0; 1];
+            reader.read_exact(&mut tmp)?;
+            tmp[0]
+        };
         let mut tag = [0; 4];
         reader.read_exact(&mut tag)?;
-        let i = reader.read_u32::<LittleEndian>()?;
+        let i = {
+            let mut tmp = [0; 4];
+            reader.read_exact(&mut tmp)?;
+            u32::from_le_bytes(tmp)
+        };
         let mut c = [0; 32];
         reader.read_exact(&mut c)?;
         let fvk = FullViewingKey::read(&mut reader, &*JUBJUB)?;
@@ -363,9 +376,9 @@ impl ExtendedFullViewingKey {
     }
 
     pub fn write<W: Write>(&self, mut writer: W) -> io::Result<()> {
-        writer.write_u8(self.depth)?;
+        writer.write_all(&[self.depth])?;
         writer.write_all(&self.parent_fvk_tag.0)?;
-        writer.write_u32::<LittleEndian>(self.child_index.to_index())?;
+        writer.write_all(&self.child_index.to_index().to_le_bytes())?;
         writer.write_all(&self.chain_code.0)?;
         writer.write_all(&self.fvk.to_bytes())?;
         writer.write_all(&self.dk.0)?;
@@ -377,8 +390,7 @@ impl ExtendedFullViewingKey {
         let tmp = match i {
             ChildIndex::Hardened(_) => return Err(()),
             ChildIndex::NonHardened(i) => {
-                let mut le_i = [0; 4];
-                LittleEndian::write_u32(&mut le_i, i);
+                let le_i = u32::from(i).to_le_bytes();
                 prf_expand_vec(
                     &self.chain_code.0,
                     &[&[0x12], &self.fvk.to_bytes(), &self.dk.0, &le_i],

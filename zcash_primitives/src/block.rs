@@ -1,4 +1,3 @@
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use hex;
 use sha2::{Digest, Sha256};
 use std::fmt;
@@ -84,7 +83,9 @@ impl BlockHeader {
     }
 
     pub fn read<R: Read>(mut reader: R) -> io::Result<Self> {
-        let version = reader.read_i32::<LittleEndian>()?;
+        let mut buf = [0; 4];
+        reader.read_exact(&mut buf)?;
+        let version = i32::from_le_bytes(buf);
 
         let mut prev_block = BlockHash([0; 32]);
         reader.read_exact(&mut prev_block.0)?;
@@ -95,13 +96,19 @@ impl BlockHeader {
         let mut final_sapling_root = [0; 32];
         reader.read_exact(&mut final_sapling_root)?;
 
-        let time = reader.read_u32::<LittleEndian>()?;
-        let bits = reader.read_u32::<LittleEndian>()?;
+        reader.read_exact(&mut buf)?;
+        let time = u32::from_le_bytes(buf);
+        reader.read_exact(&mut buf)?;
+        let bits = u32::from_le_bytes(buf);
 
         let mut nonce = [0; 32];
         reader.read_exact(&mut nonce)?;
 
-        let solution = Vector::read(&mut reader, |r| r.read_u8())?;
+        let solution = Vector::read(&mut reader, |r| {
+            let mut buf = [0; 1];
+            r.read_exact(&mut buf)?;
+            Ok(buf[0])
+        })?;
 
         BlockHeader::from_data(BlockHeaderData {
             version,
@@ -116,14 +123,14 @@ impl BlockHeader {
     }
 
     pub fn write<W: Write>(&self, mut writer: W) -> io::Result<()> {
-        writer.write_i32::<LittleEndian>(self.version)?;
+        writer.write_all(&self.version.to_le_bytes())?;
         writer.write_all(&self.prev_block.0)?;
         writer.write_all(&self.merkle_root)?;
         writer.write_all(&self.final_sapling_root)?;
-        writer.write_u32::<LittleEndian>(self.time)?;
-        writer.write_u32::<LittleEndian>(self.bits)?;
+        writer.write_all(&self.time.to_le_bytes())?;
+        writer.write_all(&self.bits.to_le_bytes())?;
         writer.write_all(&self.nonce)?;
-        Vector::write(&mut writer, &self.solution, |w, b| w.write_u8(*b))?;
+        Vector::write(&mut writer, &self.solution, |w, b| w.write_all(&[*b]))?;
 
         Ok(())
     }

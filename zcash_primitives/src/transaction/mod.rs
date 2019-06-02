@@ -1,4 +1,3 @@
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use hex;
 use sha2::{Digest, Sha256};
 use std::fmt;
@@ -154,12 +153,20 @@ impl Transaction {
     }
 
     pub fn read<R: Read>(mut reader: R) -> io::Result<Self> {
-        let header = reader.read_u32::<LittleEndian>()?;
+        let header = {
+            let mut tmp = [0; 4];
+            reader.read_exact(&mut tmp)?;
+            u32::from_le_bytes(tmp)
+        };
         let overwintered = (header >> 31) == 1;
         let version = header & 0x7FFFFFFF;
 
         let version_group_id = match overwintered {
-            true => reader.read_u32::<LittleEndian>()?,
+            true => {
+                let mut tmp = [0; 4];
+                reader.read_exact(&mut tmp)?;
+                u32::from_le_bytes(tmp)
+            }
             false => 0,
         };
 
@@ -178,9 +185,17 @@ impl Transaction {
 
         let vin = Vector::read(&mut reader, TxIn::read)?;
         let vout = Vector::read(&mut reader, TxOut::read)?;
-        let lock_time = reader.read_u32::<LittleEndian>()?;
+        let lock_time = {
+            let mut tmp = [0; 4];
+            reader.read_exact(&mut tmp)?;
+            u32::from_le_bytes(tmp)
+        };
         let expiry_height = match is_overwinter_v3 || is_sapling_v4 {
-            true => reader.read_u32::<LittleEndian>()?,
+            true => {
+                let mut tmp = [0; 4];
+                reader.read_exact(&mut tmp)?;
+                u32::from_le_bytes(tmp)
+            }
             false => 0,
         };
 
@@ -236,9 +251,9 @@ impl Transaction {
     }
 
     pub fn write<W: Write>(&self, mut writer: W) -> io::Result<()> {
-        writer.write_u32::<LittleEndian>(self.header())?;
+        writer.write_all(&self.header().to_le_bytes())?;
         if self.overwintered {
-            writer.write_u32::<LittleEndian>(self.version_group_id)?;
+            writer.write_all(&self.version_group_id.to_le_bytes())?;
         }
 
         let is_overwinter_v3 = self.overwintered
@@ -256,13 +271,13 @@ impl Transaction {
 
         Vector::write(&mut writer, &self.vin, |w, e| e.write(w))?;
         Vector::write(&mut writer, &self.vout, |w, e| e.write(w))?;
-        writer.write_u32::<LittleEndian>(self.lock_time)?;
+        writer.write_all(&self.lock_time.to_le_bytes())?;
         if is_overwinter_v3 || is_sapling_v4 {
-            writer.write_u32::<LittleEndian>(self.expiry_height)?;
+            writer.write_all(&self.expiry_height.to_le_bytes())?;
         }
 
         if is_sapling_v4 {
-            writer.write_i64::<LittleEndian>(self.value_balance.0)?;
+            writer.write_all(&self.value_balance.0.to_le_bytes())?;
             Vector::write(&mut writer, &self.shielded_spends, |w, e| e.write(w))?;
             Vector::write(&mut writer, &self.shielded_outputs, |w, e| e.write(w))?;
         }

@@ -1,5 +1,4 @@
 use blake2_rfc::blake2b::Blake2b;
-use byteorder::{LittleEndian, WriteBytesExt};
 use ff::PrimeField;
 
 use super::{
@@ -22,20 +21,6 @@ const SIGHASH_NONE: u32 = 2;
 const SIGHASH_SINGLE: u32 = 3;
 const SIGHASH_MASK: u32 = 0x1f;
 const SIGHASH_ANYONECANPAY: u32 = 0x80;
-
-macro_rules! update_u32 {
-    ($h:expr, $value:expr, $tmp:expr) => {
-        (&mut $tmp[..4]).write_u32::<LittleEndian>($value).unwrap();
-        $h.update(&$tmp[..4]);
-    };
-}
-
-macro_rules! update_i64 {
-    ($h:expr, $value:expr, $tmp:expr) => {
-        (&mut $tmp[..8]).write_i64::<LittleEndian>($value).unwrap();
-        $h.update(&$tmp[..8]);
-    };
-}
 
 macro_rules! update_hash {
     ($h:expr, $cond:expr, $value:expr) => {
@@ -81,9 +66,7 @@ fn prevout_hash(tx: &TransactionData) -> Vec<u8> {
 fn sequence_hash(tx: &TransactionData) -> Vec<u8> {
     let mut data = Vec::with_capacity(tx.vin.len() * 4);
     for t_in in &tx.vin {
-        (&mut data)
-            .write_u32::<LittleEndian>(t_in.sequence)
-            .unwrap();
+        data.extend_from_slice(&t_in.sequence.to_le_bytes());
     }
     let mut h = Blake2b::with_params(32, &[], &[], ZCASH_SEQUENCE_HASH_PERSONALIZATION);
     h.update(&data);
@@ -174,15 +157,12 @@ pub fn signature_hash_data(
 
             let mut personal = [0; 16];
             (&mut personal[..12]).copy_from_slice(ZCASH_SIGHASH_PERSONALIZATION_PREFIX);
-            (&mut personal[12..])
-                .write_u32::<LittleEndian>(consensus_branch_id)
-                .unwrap();
+            (&mut personal[12..]).copy_from_slice(&consensus_branch_id.to_le_bytes());
 
             let mut h = Blake2b::with_params(32, &[], &[], &personal);
-            let mut tmp = [0; 8];
 
-            update_u32!(h, tx.header(), tmp);
-            update_u32!(h, tx.version_group_id, tmp);
+            h.update(&tx.header().to_le_bytes());
+            h.update(&tx.version_group_id.to_le_bytes());
             update_hash!(h, hash_type & SIGHASH_ANYONECANPAY == 0, prevout_hash(tx));
             update_hash!(
                 h,
@@ -201,21 +181,19 @@ pub fn signature_hash_data(
                     shielded_outputs_hash(tx)
                 );
             }
-            update_u32!(h, tx.lock_time, tmp);
-            update_u32!(h, tx.expiry_height, tmp);
+            h.update(&tx.lock_time.to_le_bytes());
+            h.update(&tx.expiry_height.to_le_bytes());
             if sigversion == SigHashVersion::Sapling {
-                update_i64!(h, tx.value_balance.0, tmp);
+                h.update(&tx.value_balance.0.to_le_bytes());
             }
-            update_u32!(h, hash_type, tmp);
+            h.update(&hash_type.to_le_bytes());
 
             if let Some((n, script_code, amount)) = transparent_input {
                 let mut data = vec![];
                 tx.vin[n].prevout.write(&mut data).unwrap();
                 script_code.write(&mut data).unwrap();
-                (&mut data).write_i64::<LittleEndian>(amount.0).unwrap();
-                (&mut data)
-                    .write_u32::<LittleEndian>(tx.vin[n].sequence)
-                    .unwrap();
+                data.extend_from_slice(&amount.0.to_le_bytes());
+                data.extend_from_slice(&tx.vin[n].sequence.to_le_bytes());
                 h.update(&data);
             }
 

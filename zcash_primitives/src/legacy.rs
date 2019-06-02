@@ -1,6 +1,5 @@
 //! Support for legacy transparent addresses and scripts.
 
-use byteorder::{ReadBytesExt, WriteBytesExt};
 use std::io::{self, Read, Write};
 use std::ops::Shl;
 
@@ -31,12 +30,16 @@ pub struct Script(pub Vec<u8>);
 
 impl Script {
     pub fn read<R: Read>(mut reader: R) -> io::Result<Self> {
-        let script = Vector::read(&mut reader, |r| r.read_u8())?;
+        let script = Vector::read(&mut reader, |r| {
+            let mut buf = [0; 1];
+            r.read_exact(&mut buf)?;
+            Ok(buf[0])
+        })?;
         Ok(Script(script))
     }
 
     pub fn write<W: Write>(&self, mut writer: W) -> io::Result<()> {
-        Vector::write(&mut writer, &self.0, |w, e| w.write_u8(*e))
+        Vector::write(&mut writer, &self.0, |w, e| w.write_all(&[*e]))
     }
 }
 

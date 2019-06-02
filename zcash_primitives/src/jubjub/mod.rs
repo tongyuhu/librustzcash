@@ -266,13 +266,8 @@ impl JubjubBls12 {
         {
             let mut pedersen_hash_generators = vec![];
 
-            for m in 0..5 {
-                use byteorder::{LittleEndian, WriteBytesExt};
-
-                let mut segment_number = [0u8; 4];
-                (&mut segment_number[0..4])
-                    .write_u32::<LittleEndian>(m)
-                    .unwrap();
+            for m in 0u32..5 {
+                let mut segment_number = u32::from(m).to_le_bytes();
 
                 pedersen_hash_generators.push(find_group_hash(
                     &segment_number,

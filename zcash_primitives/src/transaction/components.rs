@@ -1,4 +1,3 @@
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use ff::PrimeField;
 use std::io::{self, Read, Write};
 
@@ -24,7 +23,11 @@ pub struct Amount(pub i64);
 impl Amount {
     // Read an Amount from a signed 64-bit little-endian integer.
     pub fn read_i64<R: Read>(mut reader: R, allow_negative: bool) -> io::Result<Self> {
-        let amount = reader.read_i64::<LittleEndian>()?;
+        let amount = {
+            let mut tmp = [0; 8];
+            reader.read_exact(&mut tmp)?;
+            i64::from_le_bytes(tmp)
+        };
         if 0 <= amount && amount <= MAX_MONEY {
             Ok(Amount(amount))
         } else if allow_negative && -MAX_MONEY <= amount && amount < 0 {
@@ -43,7 +46,11 @@ impl Amount {
 
     // Read an Amount from an unsigned 64-bit little-endian integer.
     pub fn read_u64<R: Read>(mut reader: R) -> io::Result<Self> {
-        let amount = reader.read_u64::<LittleEndian>()?;
+        let amount = {
+            let mut tmp = [0; 8];
+            reader.read_exact(&mut tmp)?;
+            u64::from_le_bytes(tmp)
+        };
         if amount <= MAX_MONEY as u64 {
             Ok(Amount(amount as i64))
         } else {
@@ -65,13 +72,17 @@ impl OutPoint {
     pub fn read<R: Read>(mut reader: R) -> io::Result<Self> {
         let mut hash = [0; 32];
         reader.read_exact(&mut hash)?;
-        let n = reader.read_u32::<LittleEndian>()?;
+        let n = {
+            let mut tmp = [0; 4];
+            reader.read_exact(&mut tmp)?;
+            u32::from_le_bytes(tmp)
+        };
         Ok(OutPoint { hash, n })
     }
 
     pub fn write<W: Write>(&self, mut writer: W) -> io::Result<()> {
         writer.write_all(&self.hash)?;
-        writer.write_u32::<LittleEndian>(self.n)
+        writer.write_all(&self.n.to_le_bytes())
     }
 }
 
@@ -86,7 +97,11 @@ impl TxIn {
     pub fn read<R: Read>(mut reader: &mut R) -> io::Result<Self> {
         let prevout = OutPoint::read(&mut reader)?;
         let script_sig = Script::read(&mut reader)?;
-        let sequence = reader.read_u32::<LittleEndian>()?;
+        let sequence = {
+            let mut tmp = [0; 4];
+            reader.read_exact(&mut tmp)?;
+            u32::from_le_bytes(tmp)
+        };
 
         Ok(TxIn {
             prevout,
@@ -98,7 +113,7 @@ impl TxIn {
     pub fn write<W: Write>(&self, mut writer: W) -> io::Result<()> {
         self.prevout.write(&mut writer)?;
         self.script_sig.write(&mut writer)?;
-        writer.write_u32::<LittleEndian>(self.sequence)
+        writer.write_all(&self.sequence.to_le_bytes())
     }
 }
 
@@ -120,7 +135,7 @@ impl TxOut {
     }
 
     pub fn write<W: Write>(&self, mut writer: W) -> io::Result<()> {
-        writer.write_i64::<LittleEndian>(self.value.0)?;
+        writer.write_all(&self.value.0.to_le_bytes())?;
         self.script_pubkey.write(&mut writer)
     }
 }
@@ -419,8 +434,8 @@ impl JSDescription {
     }
 
     pub fn write<W: Write>(&self, mut writer: W) -> io::Result<()> {
-        writer.write_i64::<LittleEndian>(self.vpub_old.0)?;
-        writer.write_i64::<LittleEndian>(self.vpub_new.0)?;
+        writer.write_all(&self.vpub_old.0.to_le_bytes())?;
+        writer.write_all(&self.vpub_new.0.to_le_bytes())?;
         writer.write_all(&self.anchor)?;
         writer.write_all(&self.nullifiers[0])?;
         writer.write_all(&self.nullifiers[1])?;

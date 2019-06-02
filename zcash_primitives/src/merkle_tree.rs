@@ -1,6 +1,5 @@
 //! Implementation of a Merkle tree of commitments used to prove the existence of notes.
 
-use byteorder::{LittleEndian, ReadBytesExt};
 use std::collections::VecDeque;
 use std::io::{self, Read, Write};
 use std::iter;
@@ -473,9 +472,13 @@ impl<Node: Hashable> CommitmentTreeWitness<Node> {
         }
 
         // Read the position from the witness
-        let position = match witness.read_u64::<LittleEndian>() {
-            Ok(pos) => pos,
-            Err(_) => return Err(()),
+        let position = if witness.len() >= 8 {
+            let mut tmp = [0; 8];
+            tmp.copy_from_slice(&witness[..8]);
+            witness = &witness[8..];
+            u64::from_le_bytes(tmp)
+        } else {
+            return Err(());
         };
 
         // Given the position, let's finish constructing the authentication

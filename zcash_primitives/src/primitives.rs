@@ -6,8 +6,6 @@ use group_hash::group_hash;
 
 use pedersen_hash::{pedersen_hash, Personalization};
 
-use byteorder::{LittleEndian, WriteBytesExt};
-
 use jubjub::{edwards, FixedGenerators, JubjubEngine, JubjubParams, PrimeOrder};
 
 use blake2_rfc::blake2s::Blake2s;
@@ -184,9 +182,7 @@ impl<E: JubjubEngine> Note<E> {
         let mut note_contents = vec![];
 
         // Writing the value in little endian
-        (&mut note_contents)
-            .write_u64::<LittleEndian>(self.value)
-            .unwrap();
+        note_contents.extend_from_slice(&self.value.to_le_bytes());
 
         // Write g_d
         self.g_d.write(&mut note_contents).unwrap();
