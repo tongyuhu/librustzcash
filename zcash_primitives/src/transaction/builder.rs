@@ -372,6 +372,7 @@ impl Builder {
                     output.note.clone(),
                     output.to.clone(),
                     output.memo,
+                    &mut self.rng,
                 );
 
                 let (zkproof, cv) = prover.output_proof(
@@ -434,7 +435,7 @@ impl Builder {
                     )
                 };
 
-                let esk = generate_esk();
+                let esk = generate_esk(&mut self.rng);
                 let epk = dummy_note.g_d.mul(esk, &JUBJUB);
 
                 let (zkproof, cv) =
