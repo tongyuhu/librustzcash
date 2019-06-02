@@ -1,3 +1,4 @@
+#![no_std]
 #![allow(unused_imports)]
 
 extern crate rand;
@@ -10,8 +11,8 @@ extern crate ff_derive;
 #[cfg(feature = "derive")]
 pub use ff_derive::*;
 
-use std::fmt;
-use std::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use core::fmt;
+use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 use subtle::{ConditionallySelectable, CtOption};
 
 /// This trait represents an element of a field.

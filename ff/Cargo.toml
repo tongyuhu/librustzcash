@@ -7,12 +7,12 @@ documentation = "https://docs.rs/ff/"
 homepage = "https://github.com/ebfull/ff"
 license = "MIT/Apache-2.0"
 repository = "https://github.com/ebfull/ff"
+categories = ["cryptography", "no-std"]
 
 [dependencies]
-rand = "0.4"
+rand = { version = "0.4", default-features = false }
 ff_derive = { version = "0.3.0", path = "ff_derive", optional = true }
-subtle = "2.1"
+subtle = { version = "2.1", default-features = false }
 
 [features]
-default = []
 derive = ["ff_derive"]
