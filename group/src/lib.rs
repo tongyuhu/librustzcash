@@ -1,11 +1,13 @@
+#![no_std]
+
 extern crate byteorder;
 extern crate ff;
 extern crate rand;
 extern crate subtle;
 
+use core::fmt;
+use core::ops::{Add, AddAssign, Neg, Sub, SubAssign};
 use ff::{PrimeField, ScalarEngine, SqrtField};
-use std::fmt;
-use std::ops::{Add, AddAssign, Neg, Sub, SubAssign};
 use subtle::{Choice, ConstantTimeEq, CtOption};
 
 pub mod tests;

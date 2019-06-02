@@ -1,5 +1,5 @@
+use core::ops::Neg;
 use rand::{Rand, Rng, SeedableRng, XorShiftRng};
-use std::ops::Neg;
 
 use {CurveAffine, CurveProjective, EncodedPoint};
 
@@ -288,7 +288,7 @@ fn random_addition_tests<G: CurveProjective>() {
             assert_eq!(aplusa, aplusamixed);
         }
 
-        let mut tmp = vec![G::zero(); 6];
+        let mut tmp = [G::zero(); 6];
 
         // (a + b) + c
         tmp[0] = a;

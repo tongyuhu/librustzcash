@@ -11,9 +11,10 @@ description = "Elliptic curve group traits and utilities"
 documentation = "https://docs.rs/group/"
 homepage = "https://github.com/ebfull/group"
 repository = "https://github.com/ebfull/group"
+categories = ["cryptography", "no-std"]
 
 [dependencies]
-byteorder = "1"
+byteorder = { version = "1", default-features = false }
 ff = { path = "../ff" }
-rand = "0.4"
-subtle = "2.1"
+rand = { version = "0.4", default-features = false }
+subtle = { version = "2.1", default-features = false }
