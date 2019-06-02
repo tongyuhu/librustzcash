@@ -1,7 +1,7 @@
 //! Structs and constants specific to the Sapling shielded pool.
 
 use ff::{BitIterator, PrimeField};
-use rand::OsRng;
+use rand::Rng;
 use std::io::{self, Read, Write};
 
 use crate::merkle_tree::Hashable;
@@ -107,15 +107,13 @@ lazy_static! {
 }
 
 /// Create the spendAuthSig for a Sapling SpendDescription.
-pub fn spend_sig(
+pub fn spend_sig<R: Rng>(
     ask: PrivateKey<Bls12>,
     ar: Fs,
     sighash: &[u8; 32],
+    rng: &mut R,
     params: &JubjubBls12,
 ) -> Signature {
-    // Initialize secure RNG
-    let mut rng = OsRng::new().expect("should be able to construct RNG");
-
     // We compute `rsk`...
     let rsk = ask.randomize(ar);
 
@@ -131,7 +129,7 @@ pub fn spend_sig(
     // Do the signing
     rsk.sign(
         &data_to_be_signed,
-        &mut rng,
+        rng,
         FixedGenerators::SpendingKeyGenerator,
         params,
     )
