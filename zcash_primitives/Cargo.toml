@@ -7,11 +7,11 @@ authors = [
 ]
 
 [dependencies]
-aes = "0.2"
+aes = { version = "0.2", optional = true }
 byteorder = { version = "1", default-features = false }
 crypto_api_chachapoly = "0.1"
 ff = { path = "../ff" }
-fpe = "0.1"
+fpe = { version = "0.1", optional = true }
 group = { path = "../group" }
 jubjub = { path = "../jubjub", default-features = false }
 lazy_static = "1"
@@ -29,4 +29,4 @@ hex-literal = "0.1"
 
 [features]
 default = ["std"]
-std = ["rand/std"]
+std = ["aes", "fpe", "rand/std"]

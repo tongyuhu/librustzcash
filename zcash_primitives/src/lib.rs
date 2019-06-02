@@ -1,17 +1,20 @@
 #[macro_use]
 extern crate lazy_static;
 
-extern crate aes;
 extern crate blake2_rfc;
 extern crate byteorder;
 extern crate crypto_api_chachapoly;
 extern crate ff;
-extern crate fpe;
 extern crate group;
 extern crate jubjub as new_jubjub;
 extern crate rand;
 extern crate sha2;
 extern crate subtle;
+
+#[cfg(feature = "std")]
+extern crate aes;
+#[cfg(feature = "std")]
+extern crate fpe;
 
 #[cfg(test)]
 extern crate hex;
@@ -38,6 +41,8 @@ pub mod sapling;
 mod serialize;
 pub mod transaction;
 mod util;
+
+#[cfg(feature = "std")]
 pub mod zip32;
 
 #[cfg(test)]
