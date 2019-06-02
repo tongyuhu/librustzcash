@@ -3,29 +3,10 @@
 
 use ff::PrimeField;
 use rand::{Rand, Rng};
-use std::io::{self, Read, Write};
 use std::ops::{AddAssign, MulAssign, Neg};
 
 use crate::jubjub::{edwards::Point, FixedGenerators, JubjubEngine, JubjubParams, Unknown};
 use util::hash_to_scalar;
-
-fn read_scalar<E: JubjubEngine, R: Read>(mut reader: R) -> io::Result<E::Fs> {
-    let mut s_repr = <E::Fs as PrimeField>::Repr::default();
-    reader.read_exact(s_repr.as_mut())?;
-
-    let s = E::Fs::from_bytes(&s_repr);
-    if s.is_none().into() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "scalar is not in field",
-        ));
-    }
-    Ok(s.unwrap())
-}
-
-fn write_scalar<E: JubjubEngine, W: Write>(s: &E::Fs, mut writer: W) -> io::Result<()> {
-    writer.write_all(s.to_bytes().as_ref())
-}
 
 fn h_star<E: JubjubEngine>(a: &[u8], b: &[u8]) -> E::Fs {
     hash_to_scalar::<E>(b"Zcash_RedJubjubH", a, b)
@@ -43,17 +24,19 @@ pub struct PrivateKey<E: JubjubEngine>(pub E::Fs);
 pub struct PublicKey<E: JubjubEngine>(pub Point<E, Unknown>);
 
 impl Signature {
-    pub fn read<R: Read>(mut reader: R) -> io::Result<Self> {
+    pub fn from_bytes(bytes: &[u8; 64]) -> Self {
         let mut rbar = [0u8; 32];
         let mut sbar = [0u8; 32];
-        reader.read_exact(&mut rbar)?;
-        reader.read_exact(&mut sbar)?;
-        Ok(Signature { rbar, sbar })
+        rbar.copy_from_slice(&bytes[0..32]);
+        sbar.copy_from_slice(&bytes[32..64]);
+        Signature { rbar, sbar }
     }
 
-    pub fn write<W: Write>(&self, mut writer: W) -> io::Result<()> {
-        writer.write_all(&self.rbar)?;
-        writer.write_all(&self.sbar)
+    pub fn to_bytes(&self) -> [u8; 64] {
+        let mut ret = [0; 64];
+        (&mut ret[0..32]).copy_from_slice(&self.rbar);
+        (&mut ret[32..64]).copy_from_slice(&self.sbar);
+        ret
     }
 }
 
@@ -64,13 +47,12 @@ impl<E: JubjubEngine> PrivateKey<E> {
         PrivateKey(tmp)
     }
 
-    pub fn read<R: Read>(reader: R) -> io::Result<Self> {
-        let pk = read_scalar::<E, R>(reader)?;
-        Ok(PrivateKey(pk))
+    pub fn from_bytes(bytes: &<E::Fs as PrimeField>::Repr) -> Self {
+        E::Fs::from_bytes(bytes).map(PrivateKey)
     }
 
-    pub fn write<W: Write>(&self, writer: W) -> io::Result<()> {
-        write_scalar::<E, W>(&self.0, writer)
+    pub fn to_bytes(&self) -> <E::Fs as PrimeField>::Repr {
+        self.0.to_bytes()
     }
 
     pub fn sign<R: Rng>(
@@ -98,9 +80,7 @@ impl<E: JubjubEngine> PrivateKey<E> {
         let mut s = h_star::<E>(&rbar[..], msg);
         s.mul_assign(&self.0);
         s.add_assign(&r);
-        let mut sbar = [0u8; 32];
-        write_scalar::<E, &mut [u8]>(&s, &mut sbar[..])
-            .expect("Jubjub scalars should serialize to 32 bytes");
+        let mut sbar = s.to_bytes();
 
         Signature { rbar, sbar }
     }
@@ -118,13 +98,15 @@ impl<E: JubjubEngine> PublicKey<E> {
         PublicKey(res)
     }
 
-    pub fn read<R: Read>(reader: R, params: &E::Params) -> io::Result<Self> {
-        let p = Point::read(reader, params)?;
+    pub fn from_bytes(bytes: &[u8], params: &E::Params) -> Result<Self, ()> {
+        let p = Point::read(bytes, params)?;
         Ok(PublicKey(p))
     }
 
-    pub fn write<W: Write>(&self, writer: W) -> io::Result<()> {
-        self.0.write(writer)
+    pub fn to_bytes(&self) -> [u8; 32] {
+        let mut bytes = [0; 32];
+        self.0.write(&mut bytes).unwrap();
+        bytes
     }
 
     pub fn verify(
