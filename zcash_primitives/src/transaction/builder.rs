@@ -1,7 +1,10 @@
 //! Structs for building transactions.
 
 use keys::ExpandedSpendingKey;
-use rand::{OsRng, Rand, Rng};
+use rand::{Rand, Rng};
+
+#[cfg(feature = "std")]
+use rand::OsRng;
 
 use crate::{
     jubjub::{fs::Fs, Bls12, Fr},
@@ -111,6 +114,7 @@ pub struct Builder<R: Rng> {
     change_address: Option<(OutgoingViewingKey, PaymentAddress<Bls12>)>,
 }
 
+#[cfg(feature = "std")]
 impl Builder<OsRng> {
     /// Creates a new `Builder` targeted for inclusion in the block with the given height,
     /// using default values for general transaction fields and the default OS random.

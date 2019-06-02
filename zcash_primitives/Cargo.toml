@@ -13,11 +13,11 @@ crypto_api_chachapoly = "0.1"
 ff = { path = "../ff" }
 fpe = "0.1"
 group = { path = "../group" }
-jubjub = { path = "../jubjub" }
+jubjub = { path = "../jubjub", default-features = false }
 lazy_static = "1"
-rand = "0.4"
-sha2 = "0.8"
-subtle = "2.1"
+rand = { version = "0.4", default-features = false }
+sha2 = { version = "0.8", default-features = false }
+subtle = { version = "2.1", default-features = false }
 
 [dependencies.blake2-rfc]
 git = "https://github.com/gtank/blake2-rfc"
@@ -26,3 +26,7 @@ rev = "7a5b5fc99ae483a0043db7547fb79a6fa44b88a9"
 [dev-dependencies]
 hex = "0.3"
 hex-literal = "0.1"
+
+[features]
+default = ["std"]
+std = ["rand/std"]
