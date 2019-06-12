@@ -8,7 +8,7 @@ authors = [
 [dependencies]
 bellman = { path = "../bellman" }
 byteorder = "1"
-directories = "1"
+directories = { version = "1", optional = true }
 ff = { path = "../ff" }
 pairing = { path = "../pairing" }
 rand = "0.4"
@@ -18,3 +18,7 @@ zcash_primitives = { path = "../zcash_primitives" }
 [dependencies.blake2-rfc]
 git = "https://github.com/gtank/blake2-rfc"
 rev = "7a5b5fc99ae483a0043db7547fb79a6fa44b88a9"
+
+[features]
+default = ["local-prover"]
+local-prover = ["directories"]
