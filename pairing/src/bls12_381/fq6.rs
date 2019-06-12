@@ -1,7 +1,7 @@
 use super::fq::{FROBENIUS_COEFF_FQ6_C1, FROBENIUS_COEFF_FQ6_C2};
 use super::fq2::Fq2;
 use ff::Field;
-use rand::{Rand, Rng};
+use rand::Rng;
 
 /// An element of Fq6, represented by c0 + c1 * v + c2 * v^(2).
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -14,16 +14,6 @@ pub struct Fq6 {
 impl ::std::fmt::Display for Fq6 {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         write!(f, "Fq6({} + {} * v, {} * v^2)", self.c0, self.c1, self.c2)
-    }
-}
-
-impl Rand for Fq6 {
-    fn rand<R: Rng>(rng: &mut R) -> Self {
-        Fq6 {
-            c0: rng.gen(),
-            c1: rng.gen(),
-            c2: rng.gen(),
-        }
     }
 }
 
@@ -110,6 +100,14 @@ impl Fq6 {
 }
 
 impl Field for Fq6 {
+    fn rand<R: Rng>(rng: &mut R) -> Self {
+        Fq6 {
+            c0: Fq2::rand(rng),
+            c1: Fq2::rand(rng),
+            c2: Fq2::rand(rng),
+        }
+    }
+
     fn zero() -> Self {
         Fq6 {
             c0: Fq2::zero(),

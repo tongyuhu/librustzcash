@@ -1,7 +1,8 @@
 //! Structs for building transactions.
 
+use ff::Field;
 use pairing::bls12_381::{Bls12, Fr};
-use rand::{OsRng, Rand, Rng};
+use rand::{OsRng, Rng};
 use sapling_crypto::{
     jubjub::fs::Fs,
     primitives::{Diversifier, Note, PaymentAddress},

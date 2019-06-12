@@ -2,7 +2,7 @@ use super::fq::FROBENIUS_COEFF_FQ12_C1;
 use super::fq2::Fq2;
 use super::fq6::Fq6;
 use ff::Field;
-use rand::{Rand, Rng};
+use rand::Rng;
 
 /// An element of Fq12, represented by c0 + c1 * w.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -14,15 +14,6 @@ pub struct Fq12 {
 impl ::std::fmt::Display for Fq12 {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
         write!(f, "Fq12({} + {} * w)", self.c0, self.c1)
-    }
-}
-
-impl Rand for Fq12 {
-    fn rand<R: Rng>(rng: &mut R) -> Self {
-        Fq12 {
-            c0: rng.gen(),
-            c1: rng.gen(),
-        }
     }
 }
 
@@ -49,6 +40,13 @@ impl Fq12 {
 }
 
 impl Field for Fq12 {
+    fn rand<R: Rng>(rng: &mut R) -> Self {
+        Fq12 {
+            c0: Fq6::rand(rng),
+            c1: Fq6::rand(rng),
+        }
+    }
+
     fn zero() -> Self {
         Fq12 {
             c0: Fq6::zero(),

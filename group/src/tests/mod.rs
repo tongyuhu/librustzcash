@@ -1,9 +1,13 @@
-use rand::{Rand, Rng, SeedableRng, XorShiftRng};
+use ff::Field;
+use rand::{Rng, SeedableRng, XorShiftRng};
 
 use {CurveAffine, CurveProjective, EncodedPoint};
 
 pub fn curve_tests<G: CurveProjective>() {
-    let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+    let mut rng = XorShiftRng::from_seed([
+        0x5d, 0xbe, 0x62, 0x59, 0x8d, 0x31, 0x3d, 0x76, 0x32, 0x37, 0xdb, 0x17, 0xe5, 0xbc, 0x06,
+        0x54,
+    ]);
 
     // Negation edge case with zero.
     {
@@ -69,7 +73,10 @@ fn random_wnaf_tests<G: CurveProjective>() {
 
     use wnaf::*;
 
-    let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+    let mut rng = XorShiftRng::from_seed([
+        0x5d, 0xbe, 0x62, 0x59, 0x8d, 0x31, 0x3d, 0x76, 0x32, 0x37, 0xdb, 0x17, 0xe5, 0xbc, 0x06,
+        0x54,
+    ]);
 
     {
         let mut table = vec![];
@@ -181,7 +188,10 @@ fn random_wnaf_tests<G: CurveProjective>() {
 fn random_negation_tests<G: CurveProjective>() {
     use ff::Field;
 
-    let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+    let mut rng = XorShiftRng::from_seed([
+        0x5d, 0xbe, 0x62, 0x59, 0x8d, 0x31, 0x3d, 0x76, 0x32, 0x37, 0xdb, 0x17, 0xe5, 0xbc, 0x06,
+        0x54,
+    ]);
 
     for _ in 0..1000 {
         let r = G::rand(&mut rng);
@@ -210,7 +220,10 @@ fn random_negation_tests<G: CurveProjective>() {
 }
 
 fn random_doubling_tests<G: CurveProjective>() {
-    let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+    let mut rng = XorShiftRng::from_seed([
+        0x5d, 0xbe, 0x62, 0x59, 0x8d, 0x31, 0x3d, 0x76, 0x32, 0x37, 0xdb, 0x17, 0xe5, 0xbc, 0x06,
+        0x54,
+    ]);
 
     for _ in 0..1000 {
         let mut a = G::rand(&mut rng);
@@ -237,7 +250,10 @@ fn random_doubling_tests<G: CurveProjective>() {
 }
 
 fn random_multiplication_tests<G: CurveProjective>() {
-    let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+    let mut rng = XorShiftRng::from_seed([
+        0x5d, 0xbe, 0x62, 0x59, 0x8d, 0x31, 0x3d, 0x76, 0x32, 0x37, 0xdb, 0x17, 0xe5, 0xbc, 0x06,
+        0x54,
+    ]);
 
     for _ in 0..1000 {
         let mut a = G::rand(&mut rng);
@@ -269,7 +285,10 @@ fn random_multiplication_tests<G: CurveProjective>() {
 }
 
 fn random_addition_tests<G: CurveProjective>() {
-    let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+    let mut rng = XorShiftRng::from_seed([
+        0x5d, 0xbe, 0x62, 0x59, 0x8d, 0x31, 0x3d, 0x76, 0x32, 0x37, 0xdb, 0x17, 0xe5, 0xbc, 0x06,
+        0x54,
+    ]);
 
     for _ in 0..1000 {
         let a = G::rand(&mut rng);
@@ -347,7 +366,10 @@ fn random_addition_tests<G: CurveProjective>() {
 }
 
 fn random_transformation_tests<G: CurveProjective>() {
-    let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+    let mut rng = XorShiftRng::from_seed([
+        0x5d, 0xbe, 0x62, 0x59, 0x8d, 0x31, 0x3d, 0x76, 0x32, 0x37, 0xdb, 0x17, 0xe5, 0xbc, 0x06,
+        0x54,
+    ]);
 
     for _ in 0..1000 {
         let g = G::rand(&mut rng);
@@ -364,8 +386,8 @@ fn random_transformation_tests<G: CurveProjective>() {
             assert!(!i.is_normalized());
         }
 
-        use rand::distributions::{IndependentSample, Range};
-        let between = Range::new(0, 1000);
+        use rand::distributions::Uniform;
+        let between = Uniform::new(0, 1000);
         // Sprinkle in some normalized points
         for _ in 0..5 {
             v[between.ind_sample(&mut rng)] = G::zero();
@@ -389,7 +411,10 @@ fn random_transformation_tests<G: CurveProjective>() {
 }
 
 fn random_encoding_tests<G: CurveAffine>() {
-    let mut rng = XorShiftRng::from_seed([0x5dbe6259, 0x8d313d76, 0x3237db17, 0xe5bc0654]);
+    let mut rng = XorShiftRng::from_seed([
+        0x5d, 0xbe, 0x62, 0x59, 0x8d, 0x31, 0x3d, 0x76, 0x32, 0x37, 0xdb, 0x17, 0xe5, 0xbc, 0x06,
+        0x54,
+    ]);
 
     assert_eq!(
         G::zero().into_uncompressed().into_affine().unwrap(),

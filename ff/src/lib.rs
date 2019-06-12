@@ -16,8 +16,10 @@ use std::io::{self, Read, Write};
 
 /// This trait represents an element of a field.
 pub trait Field:
-    Sized + Eq + Copy + Clone + Send + Sync + fmt::Debug + fmt::Display + 'static + rand::Rand
+    Sized + Eq + Copy + Clone + Send + Sync + fmt::Debug + fmt::Display + 'static
 {
+    fn rand<R: rand::Rng>(rng: &mut R) -> Self;
+
     /// Returns the zero element of the field, the additive identity.
     fn zero() -> Self;
 
@@ -100,11 +102,12 @@ pub trait PrimeFieldRepr:
     + fmt::Debug
     + fmt::Display
     + 'static
-    + rand::Rand
     + AsRef<[u64]>
     + AsMut<[u64]>
     + From<u64>
 {
+    fn rand<R: rand::Rng>(rng: &mut R) -> Self;
+
     /// Subtract another represetation from this one.
     fn sub_noborrow(&mut self, other: &Self);
 

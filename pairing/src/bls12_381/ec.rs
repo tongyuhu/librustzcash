@@ -200,10 +200,15 @@ macro_rules! curve_impl {
 
         }
 
-        impl Rand for $projective {
+        impl CurveProjective for $projective {
+            type Engine = Bls12;
+            type Scalar = $scalarfield;
+            type Base = $basefield;
+            type Affine = $affine;
+
             fn rand<R: Rng>(rng: &mut R) -> Self {
                 loop {
-                    let x = rng.gen();
+                    let x = Self::Base::rand(rng);
                     let greatest = rng.gen();
 
                     if let Some(p) = $affine::get_point_from_x(x, greatest) {
@@ -215,13 +220,6 @@ macro_rules! curve_impl {
                     }
                 }
             }
-        }
-
-        impl CurveProjective for $projective {
-            type Engine = Bls12;
-            type Scalar = $scalarfield;
-            type Base = $basefield;
-            type Affine = $affine;
 
             // The point at infinity is always represented by
             // Z = 0.
@@ -629,7 +627,7 @@ pub mod g1 {
     use super::g2::G2Affine;
     use ff::{BitIterator, Field, PrimeField, PrimeFieldRepr, SqrtField};
     use group::{CurveAffine, CurveProjective, EncodedPoint, GroupDecodingError};
-    use rand::{Rand, Rng};
+    use rand::Rng;
     use std::fmt;
     use {Engine, PairingCurveAffine};
 
@@ -1276,7 +1274,7 @@ pub mod g2 {
     use super::g1::G1Affine;
     use ff::{BitIterator, Field, PrimeField, PrimeFieldRepr, SqrtField};
     use group::{CurveAffine, CurveProjective, EncodedPoint, GroupDecodingError};
-    use rand::{Rand, Rng};
+    use rand::Rng;
     use std::fmt;
     use {Engine, PairingCurveAffine};
 

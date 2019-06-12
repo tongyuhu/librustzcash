@@ -5,7 +5,7 @@ use ff::{PrimeField, PrimeFieldDecodingError, ScalarEngine, SqrtField};
 use std::error::Error;
 use std::fmt;
 
-pub mod tests;
+//pub mod tests;
 
 mod wnaf;
 pub use self::wnaf::Wnaf;
@@ -22,13 +22,14 @@ pub trait CurveProjective:
     + Sync
     + fmt::Debug
     + fmt::Display
-    + rand::Rand
     + 'static
 {
     type Engine: ScalarEngine<Fr = Self::Scalar>;
     type Scalar: PrimeField + SqrtField;
     type Base: SqrtField;
     type Affine: CurveAffine<Projective = Self, Scalar = Self::Scalar>;
+
+    fn rand<R: rand::Rng>(rng: &mut R) -> Self;
 
     /// Returns the additive identity.
     fn zero() -> Self;

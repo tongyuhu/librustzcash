@@ -42,13 +42,6 @@ const NEGATIVE_ONE: Fs = Fs(FsRepr([0xaa9f02ab1d6124de, 0xb3524a6466112932, 0x73
 #[derive(Copy, Clone, PartialEq, Eq, Default, Debug)]
 pub struct FsRepr(pub [u64; 4]);
 
-impl ::rand::Rand for FsRepr {
-    #[inline(always)]
-    fn rand<R: ::rand::Rng>(rng: &mut R) -> Self {
-        FsRepr(rng.gen())
-    }
-}
-
 impl ::std::fmt::Display for FsRepr
 {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
@@ -107,6 +100,11 @@ impl PartialOrd for FsRepr {
 }
 
 impl PrimeFieldRepr for FsRepr {
+    #[inline(always)]
+    fn rand<R: ::rand::Rng>(rng: &mut R) -> Self {
+        FsRepr(rng.gen())
+    }
+
     #[inline(always)]
     fn is_odd(&self) -> bool {
         self.0[0] & 1 == 1
@@ -240,21 +238,6 @@ impl ::std::fmt::Display for Fs
     }
 }
 
-impl ::rand::Rand for Fs {
-    fn rand<R: ::rand::Rng>(rng: &mut R) -> Self {
-        loop {
-            let mut tmp = Fs(FsRepr::rand(rng));
-
-            // Mask away the unused bits at the beginning.
-            tmp.0.as_mut()[3] &= 0xffffffffffffffff >> REPR_SHAVE_BITS;
-
-            if tmp.is_valid() {
-                return tmp
-            }
-        }
-    }
-}
-
 impl From<Fs> for FsRepr {
     fn from(e: Fs) -> FsRepr {
         e.into_repr()
@@ -303,6 +286,19 @@ impl PrimeField for Fs {
 }
 
 impl Field for Fs {
+    fn rand<R: ::rand::Rng>(rng: &mut R) -> Self {
+        loop {
+            let mut tmp = Fs(FsRepr::rand(rng));
+
+            // Mask away the unused bits at the beginning.
+            tmp.0.as_mut()[3] &= 0xffffffffffffffff >> REPR_SHAVE_BITS;
+
+            if tmp.is_valid() {
+                return tmp
+            }
+        }
+    }
+
     #[inline]
     fn zero() -> Self {
         Fs(FsRepr::from(0))

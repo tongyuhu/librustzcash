@@ -1173,7 +1173,7 @@ fn test_neg_one() {
 }
 
 #[cfg(test)]
-use rand::{Rand, SeedableRng, XorShiftRng};
+use rand::{SeedableRng, XorShiftRng};
 
 #[test]
 fn test_fq_repr_ordering() {

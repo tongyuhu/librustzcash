@@ -136,13 +136,6 @@ fn prime_field_repr_impl(repr: &syn::Ident, limbs: usize) -> proc_macro2::TokenS
             }
         }
 
-        impl ::rand::Rand for #repr {
-            #[inline(always)]
-            fn rand<R: ::rand::Rng>(rng: &mut R) -> Self {
-                #repr(rng.gen())
-            }
-        }
-
         impl ::std::fmt::Display for #repr {
             fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
                 try!(write!(f, "0x"));
@@ -202,6 +195,11 @@ fn prime_field_repr_impl(repr: &syn::Ident, limbs: usize) -> proc_macro2::TokenS
         }
 
         impl ::ff::PrimeFieldRepr for #repr {
+            #[inline(always)]
+            fn rand<R: ::rand::Rng>(rng: &mut R) -> Self {
+                #repr(rng.gen())
+            }
+
             #[inline(always)]
             fn is_odd(&self) -> bool {
                 self.0[0] & 1 == 1
@@ -839,22 +837,6 @@ fn prime_field_impl(
             }
         }
 
-        impl ::rand::Rand for #name {
-            /// Computes a uniformly random element using rejection sampling.
-            fn rand<R: ::rand::Rng>(rng: &mut R) -> Self {
-                loop {
-                    let mut tmp = #name(#repr::rand(rng));
-
-                    // Mask away the unused bits at the beginning.
-                    tmp.0.as_mut()[#top_limb_index] &= 0xffffffffffffffff >> REPR_SHAVE_BITS;
-
-                    if tmp.is_valid() {
-                        return tmp
-                    }
-                }
-            }
-        }
-
         impl From<#name> for #repr {
             fn from(e: #name) -> #repr {
                 e.into_repr()
@@ -904,6 +886,20 @@ fn prime_field_impl(
         }
 
         impl ::ff::Field for #name {
+            /// Computes a uniformly random element using rejection sampling.
+            fn rand<R: ::rand::Rng>(rng: &mut R) -> Self {
+                loop {
+                    let mut tmp = #name(#repr::rand(rng));
+
+                    // Mask away the unused bits at the beginning.
+                    tmp.0.as_mut()[#top_limb_index] &= 0xffffffffffffffff >> REPR_SHAVE_BITS;
+
+                    if tmp.is_valid() {
+                        return tmp
+                    }
+                }
+            }
+
             #[inline]
             fn zero() -> Self {
                 #name(#repr::from(0))

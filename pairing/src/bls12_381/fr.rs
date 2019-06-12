@@ -6,7 +6,7 @@ use ff::{Field, PrimeField, PrimeFieldDecodingError, PrimeFieldRepr};
 pub struct Fr(FrRepr);
 
 #[cfg(test)]
-use rand::{Rand, SeedableRng, XorShiftRng};
+use rand::{SeedableRng, XorShiftRng};
 
 #[test]
 fn test_fr_repr_ordering() {

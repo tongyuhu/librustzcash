@@ -37,13 +37,13 @@ pub fn generate_random_parameters<E, C, R>(
 ) -> Result<Parameters<E>, SynthesisError>
     where E: Engine, C: Circuit<E>, R: Rng
 {
-    let g1 = rng.gen();
-    let g2 = rng.gen();
-    let alpha = rng.gen();
-    let beta = rng.gen();
-    let gamma = rng.gen();
-    let delta = rng.gen();
-    let tau = rng.gen();
+    let g1 = E::G1::rand(rng);
+    let g2 = E::G2::rand(rng);
+    let alpha = E::Fr::rand(rng);
+    let beta = E::Fr::rand(rng);
+    let gamma = E::Fr::rand(rng);
+    let delta = E::Fr::rand(rng);
+    let tau = E::Fr::rand(rng);
 
     generate_parameters::<E, C>(
         circuit,

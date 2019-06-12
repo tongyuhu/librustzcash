@@ -191,8 +191,8 @@ pub fn create_random_proof<E, C, R, P: ParameterSource<E>>(
 ) -> Result<Proof<E>, SynthesisError>
     where E: Engine, C: Circuit<E>, R: Rng
 {
-    let r = rng.gen();
-    let s = rng.gen();
+    let r = E::Fr::rand(rng);
+    let s = E::Fr::rand(rng);
 
     create_proof::<E, C, P>(circuit, params, r, s)
 }

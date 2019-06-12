@@ -2,7 +2,7 @@
 //! See section 5.4.6 of the Sapling protocol specification.
 
 use ff::{Field, PrimeField, PrimeFieldRepr};
-use rand::{Rng, Rand};
+use rand::Rng;
 use std::io::{self, Read, Write};
 
 use jubjub::{FixedGenerators, JubjubEngine, JubjubParams, Unknown, edwards::Point};
