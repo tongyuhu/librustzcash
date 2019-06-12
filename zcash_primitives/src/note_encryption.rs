@@ -5,7 +5,7 @@ use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use crypto_api_chachapoly::{ChaCha20Ietf, ChachaPolyIetf};
 use ff::{PrimeField, PrimeFieldRepr};
 use pairing::bls12_381::{Bls12, Fr};
-use rand::{OsRng, Rng};
+use rand::Rng;
 use sapling_crypto::{
     jubjub::{
         edwards,
@@ -134,13 +134,10 @@ impl Memo {
     }
 }
 
-pub fn generate_esk() -> Fs {
+pub fn generate_esk<R: Rng>(rng: &mut R) -> Fs {
     // create random 64 byte buffer
-    let mut rng = OsRng::new().expect("should be able to construct RNG");
     let mut buffer = [0u8; 64];
-    for i in 0..buffer.len() {
-        buffer[i] = rng.gen();
-    }
+    rng.fill_bytes(&mut buffer);
 
     // reduce to uniform value
     Fs::to_uniform(&buffer[..])
@@ -244,7 +241,7 @@ fn prf_ock(
 /// let note = to.create_note(value, rcv, &JUBJUB).unwrap();
 /// let cmu = note.cm(&JUBJUB);
 ///
-/// let enc = SaplingNoteEncryption::new(ovk, note, to, Memo::default());
+/// let enc = SaplingNoteEncryption::new(ovk, note, to, Memo::default(), &mut rng);
 /// let encCiphertext = enc.encrypt_note_plaintext();
 /// let outCiphertext = enc.encrypt_outgoing_plaintext(&cv.cm(&JUBJUB).into(), &cmu);
 /// ```
@@ -259,13 +256,14 @@ pub struct SaplingNoteEncryption {
 
 impl SaplingNoteEncryption {
     /// Creates a new encryption context for the given note.
-    pub fn new(
+    pub fn new<R: Rng>(
         ovk: OutgoingViewingKey,
         note: Note<Bls12>,
         to: PaymentAddress<Bls12>,
         memo: Memo,
+        rng: &mut R,
     ) -> SaplingNoteEncryption {
-        let esk = generate_esk();
+        let esk = generate_esk(rng);
         let epk = note.g_d.mul(esk, &JUBJUB);
 
         SaplingNoteEncryption {
@@ -690,8 +688,8 @@ mod tests {
         assert_eq!(Memo::default().to_utf8(), None);
     }
 
-    fn random_enc_ciphertext(
-        mut rng: &mut Rng,
+    fn random_enc_ciphertext<R: Rng>(
+        mut rng: &mut R,
     ) -> (
         OutgoingViewingKey,
         Fs,
@@ -718,7 +716,7 @@ mod tests {
         let cmu = note.cm(&JUBJUB);
 
         let ovk = OutgoingViewingKey([0; 32]);
-        let ne = SaplingNoteEncryption::new(ovk, note, pa, Memo([0; 512]));
+        let ne = SaplingNoteEncryption::new(ovk, note, pa, Memo([0; 512]), rng);
         let epk = ne.epk();
         let enc_ciphertext = ne.encrypt_note_plaintext();
         let out_ciphertext = ne.encrypt_outgoing_plaintext(&cv, &cmu);
@@ -1365,7 +1363,8 @@ mod tests {
             // Test encryption
             //
 
-            let mut ne = SaplingNoteEncryption::new(ovk, note, to, Memo(tv.memo));
+            let mut ne =
+                SaplingNoteEncryption::new(ovk, note, to, Memo(tv.memo), &mut thread_rng());
             // Swap in the ephemeral keypair from the test vectors
             ne.esk = esk;
             ne.epk = epk;
