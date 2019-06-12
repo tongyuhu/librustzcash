@@ -999,8 +999,11 @@ pub extern "system" fn librustzcash_sapling_spend_sig(
         Err(_) => return false,
     };
 
+    // Initialize secure RNG
+    let mut rng = OsRng::new().expect("should be able to construct RNG");
+
     // Do the signing
-    let sig = spend_sig(ask, ar, unsafe { &*sighash }, &JUBJUB);
+    let sig = spend_sig(ask, ar, unsafe { &*sighash }, &mut rng, &JUBJUB);
 
     // Write out the signature
     sig.write(&mut (unsafe { &mut *result })[..])
