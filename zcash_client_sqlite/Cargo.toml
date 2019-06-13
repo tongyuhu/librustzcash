@@ -13,10 +13,10 @@ ff = { path = "../ff" }
 pairing = { path = "../pairing" }
 protobuf = "2"
 rusqlite = { version = "0.15", features = ["bundled"] }
-sapling-crypto = { path = "../sapling-crypto" }
+sapling-crypto = { path = "../sapling-crypto", default-features = false }
 time = "0.1"
-zcash_client_backend = { path = "../zcash_client_backend" }
-zcash_primitives = { path = "../zcash_primitives" }
+zcash_client_backend = { path = "../zcash_client_backend", default-features = false }
+zcash_primitives = { path = "../zcash_primitives", default-features = false }
 
 [dev-dependencies]
 rand = "0.6"
@@ -24,4 +24,6 @@ tempfile = "3"
 zcash_proofs = { path = "../zcash_proofs" }
 
 [features]
+default = ["multicore"]
 mainnet = []
+multicore = ["sapling-crypto/multicore"]

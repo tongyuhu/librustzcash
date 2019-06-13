@@ -13,11 +13,15 @@ ff = { path = "../ff" }
 hex = "0.3"
 pairing = { path = "../pairing" }
 protobuf = "2"
-sapling-crypto = { path = "../sapling-crypto" }
-zcash_primitives = { path = "../zcash_primitives" }
+sapling-crypto = { path = "../sapling-crypto", default-features = false }
+zcash_primitives = { path = "../zcash_primitives", default-features = false }
 
 [build-dependencies]
 protobuf-codegen-pure = "2"
 
 [dev-dependencies]
 rand = "0.6"
+
+[features]
+default = ["multicore"]
+multicore = ["sapling-crypto/multicore"]

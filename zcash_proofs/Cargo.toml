@@ -6,19 +6,20 @@ authors = [
 ]
 
 [dependencies]
-bellman = { path = "../bellman" }
+bellman = { path = "../bellman", default-features = false, features = ["groth16"] }
 byteorder = "1"
 directories = { version = "1", optional = true }
 ff = { path = "../ff" }
 pairing = { path = "../pairing" }
 rand = "0.6"
-sapling-crypto = { path = "../sapling-crypto" }
-zcash_primitives = { path = "../zcash_primitives" }
+sapling-crypto = { path = "../sapling-crypto", default-features = false }
+zcash_primitives = { path = "../zcash_primitives", default-features = false }
 
 [dependencies.blake2-rfc]
 git = "https://github.com/gtank/blake2-rfc"
 rev = "7a5b5fc99ae483a0043db7547fb79a6fa44b88a9"
 
 [features]
-default = ["local-prover"]
+default = ["local-prover", "multicore"]
 local-prover = ["directories"]
+multicore = ["bellman/multicore"]
