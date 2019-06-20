@@ -67,7 +67,7 @@ impl fmt::Debug for Memo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Memo(")?;
         match self.to_utf8() {
-            Some(Ok(memo)) => write!(f, "{}", memo)?,
+            Some(Ok(memo)) => write!(f, "\"{}\"", memo)?,
             _ => fmt_colon_delimited_hex(f, &self.0[..])?,
         }
         write!(f, ")")
@@ -123,13 +123,11 @@ impl Memo {
     pub fn to_utf8(&self) -> Option<Result<String, str::Utf8Error>> {
         // Check if it is a text or binary memo
         if self.0[0] < 0xF5 {
-            // Drop trailing zeroes
-            let mut data = &self.0[..];
-            while let Some((0, next)) = data.split_last() {
-                data = next;
-            }
             // Check if it is valid UTF8
-            Some(str::from_utf8(data).map(|memo| memo.to_owned()))
+            Some(str::from_utf8(&self.0).map(|memo| {
+                // Drop trailing zeroes
+                memo.trim_end_matches(char::from(0)).to_owned()
+            }))
         } else {
             None
         }
@@ -151,7 +149,7 @@ pub fn generate_esk() -> Fs {
 /// Sapling key agreement for note encryption.
 ///
 /// Implements section 5.4.4.3 of the Zcash Protocol Specification.
-pub fn sapling_ka_agree<'a, P>(esk: &Fs, pk_d: &'a P) -> [u8; 32]
+pub fn sapling_ka_agree<'a, P>(esk: &Fs, pk_d: &'a P) -> edwards::Point<Bls12, PrimeOrder>
 where
     edwards::Point<Bls12, Unknown>: From<&'a P>,
 {
@@ -161,20 +159,18 @@ where
     let p = p.mul_by_cofactor(&JUBJUB);
 
     // Multiply by esk
-    let p = p.mul(*esk, &JUBJUB);
-
-    // Produce result
-    let mut result = [0; 32];
-    p.write(&mut result[..]).expect("length is not 32 bytes");
-    result
+    p.mul(*esk, &JUBJUB)
 }
 
 /// Sapling KDF for note encryption.
 ///
 /// Implements section 5.4.4.4 of the Zcash Protocol Specification.
-fn kdf_sapling(dhsecret: &[u8], epk: &edwards::Point<Bls12, PrimeOrder>) -> Blake2bResult {
+fn kdf_sapling(
+    dhsecret: edwards::Point<Bls12, PrimeOrder>,
+    epk: &edwards::Point<Bls12, PrimeOrder>,
+) -> Blake2bResult {
     let mut input = [0u8; 64];
-    input[0..32].copy_from_slice(&dhsecret);
+    dhsecret.write(&mut input[0..32]).unwrap();
     epk.write(&mut input[32..64]).unwrap();
 
     let mut h = Blake2b::with_params(32, &[], &[], KDF_SAPLING_PERSONALIZATION);
@@ -295,17 +291,22 @@ impl SaplingNoteEncryption {
     /// Generates `encCiphertext` for this note.
     pub fn encrypt_note_plaintext(&self) -> [u8; ENC_CIPHERTEXT_SIZE] {
         let shared_secret = sapling_ka_agree(&self.esk, &self.to.pk_d);
-        let key = kdf_sapling(&shared_secret, &self.epk);
+        let key = kdf_sapling(shared_secret, &self.epk);
 
-        let mut input = Vec::with_capacity(NOTE_PLAINTEXT_SIZE);
-        input.push(1);
-        input.extend_from_slice(&self.to.diversifier.0);
-        (&mut input)
+        // Note plaintext encoding is defined in section 5.5 of the Zcash Protocol
+        // Specification.
+        let mut input = [0; NOTE_PLAINTEXT_SIZE];
+        input[0] = 1;
+        input[1..12].copy_from_slice(&self.to.diversifier.0);
+        (&mut input[12..20])
             .write_u64::<LittleEndian>(self.note.value)
             .unwrap();
-        self.note.r.into_repr().write_le(&mut input).unwrap();
-        input.extend_from_slice(&self.memo.0);
-        assert_eq!(input.len(), NOTE_PLAINTEXT_SIZE);
+        self.note
+            .r
+            .into_repr()
+            .write_le(&mut input[20..COMPACT_NOTE_SIZE])
+            .unwrap();
+        input[COMPACT_NOTE_SIZE..NOTE_PLAINTEXT_SIZE].copy_from_slice(&self.memo.0);
 
         let mut output = [0u8; ENC_CIPHERTEXT_SIZE];
         assert_eq!(
@@ -326,34 +327,36 @@ impl SaplingNoteEncryption {
     ) -> [u8; OUT_CIPHERTEXT_SIZE] {
         let key = prf_ock(&self.ovk, &cv, &cmu, &self.epk);
 
-        let mut buf = [0u8; OUT_CIPHERTEXT_SIZE];
-        self.note.pk_d.write(&mut buf[0..32]).unwrap();
+        let mut input = [0u8; OUT_PLAINTEXT_SIZE];
+        self.note.pk_d.write(&mut input[0..32]).unwrap();
         self.esk
             .into_repr()
-            .write_le(&mut buf[32..OUT_PLAINTEXT_SIZE])
+            .write_le(&mut input[32..OUT_PLAINTEXT_SIZE])
             .unwrap();
 
+        let mut output = [0u8; OUT_CIPHERTEXT_SIZE];
         assert_eq!(
             ChachaPolyIetf::aead_cipher()
-                .seal(
-                    &mut buf,
-                    OUT_PLAINTEXT_SIZE,
-                    &[],
-                    key.as_bytes(),
-                    &[0u8; 12]
-                )
+                .seal_to(&mut output, &input, &[], key.as_bytes(), &[0u8; 12])
                 .unwrap(),
             OUT_CIPHERTEXT_SIZE
         );
-        buf
+
+        output
     }
 }
 
-fn parse_note_plaintext_minus_memo(
+fn parse_note_plaintext_without_memo(
     ivk: &Fs,
     cmu: &Fr,
     plaintext: &[u8],
 ) -> Option<(Note<Bls12>, PaymentAddress<Bls12>)> {
+    // Check note plaintext version
+    match plaintext[0] {
+        0x01 => (),
+        _ => return None,
+    }
+
     let mut d = [0u8; 11];
     d.copy_from_slice(&plaintext[1..12]);
 
@@ -395,9 +398,9 @@ pub fn try_sapling_note_decryption(
     assert_eq!(enc_ciphertext.len(), ENC_CIPHERTEXT_SIZE);
 
     let shared_secret = sapling_ka_agree(ivk, epk);
-    let key = kdf_sapling(&shared_secret, &epk);
+    let key = kdf_sapling(shared_secret, &epk);
 
-    let mut plaintext = vec![0; ENC_CIPHERTEXT_SIZE];
+    let mut plaintext = [0; ENC_CIPHERTEXT_SIZE];
     assert_eq!(
         ChachaPolyIetf::aead_cipher()
             .open_to(
@@ -411,7 +414,7 @@ pub fn try_sapling_note_decryption(
         NOTE_PLAINTEXT_SIZE
     );
 
-    let (note, to) = parse_note_plaintext_minus_memo(ivk, cmu, &plaintext)?;
+    let (note, to) = parse_note_plaintext_without_memo(ivk, cmu, &plaintext)?;
 
     let mut memo = [0u8; 512];
     memo.copy_from_slice(&plaintext[COMPACT_NOTE_SIZE..NOTE_PLAINTEXT_SIZE]);
@@ -437,13 +440,12 @@ pub fn try_sapling_compact_note_decryption(
     assert_eq!(enc_ciphertext.len(), COMPACT_NOTE_SIZE);
 
     let shared_secret = sapling_ka_agree(ivk, epk);
-    let key = kdf_sapling(&shared_secret, &epk);
+    let key = kdf_sapling(shared_secret, &epk);
 
     // Prefix plaintext with 64 zero-bytes to skip over Poly1305 keying output
     const CHACHA20_BLOCK_SIZE: usize = 64;
-    let mut plaintext = Vec::with_capacity(CHACHA20_BLOCK_SIZE + COMPACT_NOTE_SIZE);
-    plaintext.extend_from_slice(&[0; CHACHA20_BLOCK_SIZE]);
-    plaintext.extend_from_slice(&enc_ciphertext[0..COMPACT_NOTE_SIZE]);
+    let mut plaintext = [0; CHACHA20_BLOCK_SIZE + COMPACT_NOTE_SIZE];
+    plaintext[CHACHA20_BLOCK_SIZE..].copy_from_slice(&enc_ciphertext[0..COMPACT_NOTE_SIZE]);
     assert_eq!(
         ChaCha20Ietf::cipher()
             .decrypt(
@@ -456,7 +458,7 @@ pub fn try_sapling_compact_note_decryption(
         CHACHA20_BLOCK_SIZE + COMPACT_NOTE_SIZE
     );
 
-    parse_note_plaintext_minus_memo(ivk, cmu, &plaintext[CHACHA20_BLOCK_SIZE..])
+    parse_note_plaintext_without_memo(ivk, cmu, &plaintext[CHACHA20_BLOCK_SIZE..])
 }
 
 /// Recovery of the full note plaintext by the sender.
@@ -479,7 +481,7 @@ pub fn try_sapling_output_recovery(
 
     let ock = prf_ock(&ovk, &cv, &cmu, &epk);
 
-    let mut op = vec![0; OUT_CIPHERTEXT_SIZE];
+    let mut op = [0; OUT_CIPHERTEXT_SIZE];
     assert_eq!(
         ChachaPolyIetf::aead_cipher()
             .open_to(&mut op, &out_ciphertext, &[], ock.as_bytes(), &[0u8; 12])
@@ -496,9 +498,9 @@ pub fn try_sapling_output_recovery(
     let esk = Fs::from_repr(esk).ok()?;
 
     let shared_secret = sapling_ka_agree(&esk, &pk_d);
-    let key = kdf_sapling(&shared_secret, &epk);
+    let key = kdf_sapling(shared_secret, &epk);
 
-    let mut plaintext = vec![0; ENC_CIPHERTEXT_SIZE];
+    let mut plaintext = [0; ENC_CIPHERTEXT_SIZE];
     assert_eq!(
         ChachaPolyIetf::aead_cipher()
             .open_to(
@@ -511,6 +513,12 @@ pub fn try_sapling_output_recovery(
             .ok()?,
         NOTE_PLAINTEXT_SIZE
     );
+
+    // Check note plaintext version
+    match plaintext[0] {
+        0x01 => (),
+        _ => return None,
+    }
 
     let mut d = [0u8; 11];
     d.copy_from_slice(&plaintext[1..12]);
@@ -547,6 +555,7 @@ pub fn try_sapling_output_recovery(
 
 #[cfg(test)]
 mod tests {
+    use crypto_api_chachapoly::ChachaPolyIetf;
     use ff::{PrimeField, PrimeFieldRepr};
     use pairing::bls12_381::{Bls12, Fr, FrRepr};
     use rand::{thread_rng, Rand, Rng};
@@ -562,7 +571,8 @@ mod tests {
     use super::{
         kdf_sapling, prf_ock, sapling_ka_agree, try_sapling_compact_note_decryption,
         try_sapling_note_decryption, try_sapling_output_recovery, Memo, SaplingNoteEncryption,
-        COMPACT_NOTE_SIZE, ENC_CIPHERTEXT_SIZE, OUT_CIPHERTEXT_SIZE,
+        COMPACT_NOTE_SIZE, ENC_CIPHERTEXT_SIZE, NOTE_PLAINTEXT_SIZE, OUT_CIPHERTEXT_SIZE,
+        OUT_PLAINTEXT_SIZE,
     };
     use crate::{keys::OutgoingViewingKey, JUBJUB};
 
@@ -742,6 +752,94 @@ mod tests {
         )
     }
 
+    fn reencrypt_enc_ciphertext(
+        ovk: &OutgoingViewingKey,
+        cv: &edwards::Point<Bls12, Unknown>,
+        cmu: &Fr,
+        epk: &edwards::Point<Bls12, PrimeOrder>,
+        enc_ciphertext: &mut [u8; ENC_CIPHERTEXT_SIZE],
+        out_ciphertext: &[u8; OUT_CIPHERTEXT_SIZE],
+        modify_plaintext: impl Fn(&mut [u8; NOTE_PLAINTEXT_SIZE]),
+    ) {
+        let ock = prf_ock(&ovk, &cv, &cmu, &epk);
+
+        let mut op = [0; OUT_CIPHERTEXT_SIZE];
+        assert_eq!(
+            ChachaPolyIetf::aead_cipher()
+                .open_to(&mut op, out_ciphertext, &[], ock.as_bytes(), &[0u8; 12])
+                .unwrap(),
+            OUT_PLAINTEXT_SIZE
+        );
+
+        let pk_d = edwards::Point::<Bls12, _>::read(&op[0..32], &JUBJUB)
+            .unwrap()
+            .as_prime_order(&JUBJUB)
+            .unwrap();
+
+        let mut esk = FsRepr::default();
+        esk.read_le(&op[32..OUT_PLAINTEXT_SIZE]).unwrap();
+        let esk = Fs::from_repr(esk).unwrap();
+
+        let shared_secret = sapling_ka_agree(&esk, &pk_d);
+        let key = kdf_sapling(shared_secret, &epk);
+
+        let mut plaintext = {
+            let mut buf = [0; ENC_CIPHERTEXT_SIZE];
+            assert_eq!(
+                ChachaPolyIetf::aead_cipher()
+                    .open_to(&mut buf, enc_ciphertext, &[], key.as_bytes(), &[0u8; 12])
+                    .unwrap(),
+                NOTE_PLAINTEXT_SIZE
+            );
+            let mut pt = [0; NOTE_PLAINTEXT_SIZE];
+            pt.copy_from_slice(&buf[..NOTE_PLAINTEXT_SIZE]);
+            pt
+        };
+
+        modify_plaintext(&mut plaintext);
+
+        assert_eq!(
+            ChachaPolyIetf::aead_cipher()
+                .seal_to(enc_ciphertext, &plaintext, &[], &key.as_bytes(), &[0u8; 12])
+                .unwrap(),
+            ENC_CIPHERTEXT_SIZE
+        );
+    }
+
+    fn find_invalid_diversifier() -> Diversifier {
+        // Find an invalid diversifier
+        let mut d = Diversifier([0; 11]);
+        loop {
+            for k in 0..11 {
+                d.0[k] = d.0[k].wrapping_add(1);
+                if d.0[k] != 0 {
+                    break;
+                }
+            }
+            if d.g_d::<Bls12>(&JUBJUB).is_none() {
+                break;
+            }
+        }
+        d
+    }
+
+    fn find_valid_diversifier() -> Diversifier {
+        // Find a different valid diversifier
+        let mut d = Diversifier([0; 11]);
+        loop {
+            for k in 0..11 {
+                d.0[k] = d.0[k].wrapping_add(1);
+                if d.0[k] != 0 {
+                    break;
+                }
+            }
+            if d.g_d::<Bls12>(&JUBJUB).is_some() {
+                break;
+            }
+        }
+        d
+    }
+
     #[test]
     fn decryption_with_invalid_ivk() {
         let mut rng = thread_rng();
@@ -790,6 +888,72 @@ mod tests {
         let (_, ivk, _, cmu, epk, mut enc_ciphertext, _) = random_enc_ciphertext(&mut rng);
 
         enc_ciphertext[ENC_CIPHERTEXT_SIZE - 1] ^= 0xff;
+        assert_eq!(
+            try_sapling_note_decryption(&ivk, &epk, &cmu, &enc_ciphertext),
+            None
+        );
+    }
+
+    #[test]
+    fn decryption_with_invalid_version_byte() {
+        let mut rng = thread_rng();
+
+        let (ovk, ivk, cv, cmu, epk, mut enc_ciphertext, out_ciphertext) =
+            random_enc_ciphertext(&mut rng);
+
+        reencrypt_enc_ciphertext(
+            &ovk,
+            &cv,
+            &cmu,
+            &epk,
+            &mut enc_ciphertext,
+            &out_ciphertext,
+            |pt| pt[0] = 0x02,
+        );
+        assert_eq!(
+            try_sapling_note_decryption(&ivk, &epk, &cmu, &enc_ciphertext),
+            None
+        );
+    }
+
+    #[test]
+    fn decryption_with_invalid_diversifier() {
+        let mut rng = thread_rng();
+
+        let (ovk, ivk, cv, cmu, epk, mut enc_ciphertext, out_ciphertext) =
+            random_enc_ciphertext(&mut rng);
+
+        reencrypt_enc_ciphertext(
+            &ovk,
+            &cv,
+            &cmu,
+            &epk,
+            &mut enc_ciphertext,
+            &out_ciphertext,
+            |pt| pt[1..12].copy_from_slice(&find_invalid_diversifier().0),
+        );
+        assert_eq!(
+            try_sapling_note_decryption(&ivk, &epk, &cmu, &enc_ciphertext),
+            None
+        );
+    }
+
+    #[test]
+    fn decryption_with_incorrect_diversifier() {
+        let mut rng = thread_rng();
+
+        let (ovk, ivk, cv, cmu, epk, mut enc_ciphertext, out_ciphertext) =
+            random_enc_ciphertext(&mut rng);
+
+        reencrypt_enc_ciphertext(
+            &ovk,
+            &cv,
+            &cmu,
+            &epk,
+            &mut enc_ciphertext,
+            &out_ciphertext,
+            |pt| pt[1..12].copy_from_slice(&find_valid_diversifier().0),
+        );
         assert_eq!(
             try_sapling_note_decryption(&ivk, &epk, &cmu, &enc_ciphertext),
             None
@@ -848,13 +1012,75 @@ mod tests {
     }
 
     #[test]
+    fn compact_decryption_with_invalid_version_byte() {
+        let mut rng = thread_rng();
+
+        let (ovk, ivk, cv, cmu, epk, mut enc_ciphertext, out_ciphertext) =
+            random_enc_ciphertext(&mut rng);
+
+        reencrypt_enc_ciphertext(
+            &ovk,
+            &cv,
+            &cmu,
+            &epk,
+            &mut enc_ciphertext,
+            &out_ciphertext,
+            |pt| pt[0] = 0x02,
+        );
+        assert_eq!(
+            try_sapling_compact_note_decryption(
+                &ivk,
+                &epk,
+                &cmu,
+                &enc_ciphertext[..COMPACT_NOTE_SIZE]
+            ),
+            None
+        );
+    }
+
+    #[test]
     fn compact_decryption_with_invalid_diversifier() {
         let mut rng = thread_rng();
 
-        let (_, ivk, _, cmu, epk, mut enc_ciphertext, _) = random_enc_ciphertext(&mut rng);
+        let (ovk, ivk, cv, cmu, epk, mut enc_ciphertext, out_ciphertext) =
+            random_enc_ciphertext(&mut rng);
 
-        // In compact decryption, this will result in an altered diversifier
-        enc_ciphertext[1] ^= 0xff;
+        reencrypt_enc_ciphertext(
+            &ovk,
+            &cv,
+            &cmu,
+            &epk,
+            &mut enc_ciphertext,
+            &out_ciphertext,
+            |pt| pt[1..12].copy_from_slice(&find_invalid_diversifier().0),
+        );
+        assert_eq!(
+            try_sapling_compact_note_decryption(
+                &ivk,
+                &epk,
+                &cmu,
+                &enc_ciphertext[..COMPACT_NOTE_SIZE]
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn compact_decryption_with_incorrect_diversifier() {
+        let mut rng = thread_rng();
+
+        let (ovk, ivk, cv, cmu, epk, mut enc_ciphertext, out_ciphertext) =
+            random_enc_ciphertext(&mut rng);
+
+        reencrypt_enc_ciphertext(
+            &ovk,
+            &cv,
+            &cmu,
+            &epk,
+            &mut enc_ciphertext,
+            &out_ciphertext,
+            |pt| pt[1..12].copy_from_slice(&find_valid_diversifier().0),
+        );
         assert_eq!(
             try_sapling_compact_note_decryption(
                 &ivk,
@@ -966,6 +1192,72 @@ mod tests {
     }
 
     #[test]
+    fn recovery_with_invalid_version_byte() {
+        let mut rng = thread_rng();
+
+        let (ovk, _, cv, cmu, epk, mut enc_ciphertext, out_ciphertext) =
+            random_enc_ciphertext(&mut rng);
+
+        reencrypt_enc_ciphertext(
+            &ovk,
+            &cv,
+            &cmu,
+            &epk,
+            &mut enc_ciphertext,
+            &out_ciphertext,
+            |pt| pt[0] = 0x02,
+        );
+        assert_eq!(
+            try_sapling_output_recovery(&ovk, &cv, &cmu, &epk, &enc_ciphertext, &out_ciphertext),
+            None
+        );
+    }
+
+    #[test]
+    fn recovery_with_invalid_diversifier() {
+        let mut rng = thread_rng();
+
+        let (ovk, _, cv, cmu, epk, mut enc_ciphertext, out_ciphertext) =
+            random_enc_ciphertext(&mut rng);
+
+        reencrypt_enc_ciphertext(
+            &ovk,
+            &cv,
+            &cmu,
+            &epk,
+            &mut enc_ciphertext,
+            &out_ciphertext,
+            |pt| pt[1..12].copy_from_slice(&find_invalid_diversifier().0),
+        );
+        assert_eq!(
+            try_sapling_output_recovery(&ovk, &cv, &cmu, &epk, &enc_ciphertext, &out_ciphertext),
+            None
+        );
+    }
+
+    #[test]
+    fn recovery_with_incorrect_diversifier() {
+        let mut rng = thread_rng();
+
+        let (ovk, _, cv, cmu, epk, mut enc_ciphertext, out_ciphertext) =
+            random_enc_ciphertext(&mut rng);
+
+        reencrypt_enc_ciphertext(
+            &ovk,
+            &cv,
+            &cmu,
+            &epk,
+            &mut enc_ciphertext,
+            &out_ciphertext,
+            |pt| pt[1..12].copy_from_slice(&find_valid_diversifier().0),
+        );
+        assert_eq!(
+            try_sapling_output_recovery(&ovk, &cv, &cmu, &epk, &enc_ciphertext, &out_ciphertext),
+            None
+        );
+    }
+
+    #[test]
     fn test_vectors() {
         let test_vectors = crate::test_vectors::note_encryption::make_test_vectors();
 
@@ -1011,9 +1303,15 @@ mod tests {
             //
 
             let shared_secret = sapling_ka_agree(&esk, &pk_d);
-            assert_eq!(shared_secret, tv.shared_secret);
+            {
+                let mut encoded = [0; 32];
+                shared_secret
+                    .write(&mut encoded[..])
+                    .expect("length is not 32 bytes");
+                assert_eq!(encoded, tv.shared_secret);
+            }
 
-            let k_enc = kdf_sapling(&shared_secret, &epk);
+            let k_enc = kdf_sapling(shared_secret, &epk);
             assert_eq!(k_enc.as_bytes(), tv.k_enc);
 
             let ovk = OutgoingViewingKey(tv.ovk);
