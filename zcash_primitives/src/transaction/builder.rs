@@ -59,11 +59,78 @@ struct SpendDescriptionInfo {
     witness: CommitmentTreeWitness<Node>,
 }
 
-struct OutputDescriptionInfo {
+pub struct SaplingOutput {
     ovk: OutgoingViewingKey,
     to: PaymentAddress<Bls12>,
     note: Note<Bls12>,
     memo: Memo,
+}
+
+impl SaplingOutput {
+    pub fn new<R: Rng>(
+        rng: &mut R,
+        ovk: OutgoingViewingKey,
+        to: PaymentAddress<Bls12>,
+        value: Amount,
+        memo: Option<Memo>,
+    ) -> Result<Self, Error> {
+        let g_d = match to.g_d(&JUBJUB) {
+            Some(g_d) => g_d,
+            None => return Err(Error(ErrorKind::InvalidAddress)),
+        };
+        if value.0 < 0 {
+            return Err(Error(ErrorKind::InvalidAmount));
+        }
+
+        let rcm = Fs::rand(rng);
+
+        let note = Note {
+            g_d,
+            pk_d: to.pk_d.clone(),
+            value: value.0 as u64,
+            r: rcm,
+        };
+
+        Ok(SaplingOutput {
+            ovk,
+            to,
+            note,
+            memo: memo.unwrap_or_default(),
+        })
+    }
+
+    pub fn build<P: TxProver>(
+        self,
+        prover: &P,
+        ctx: &mut P::SaplingProvingContext,
+    ) -> OutputDescription {
+        let encryptor =
+            SaplingNoteEncryption::new(self.ovk, self.note.clone(), self.to.clone(), self.memo);
+
+        let (zkproof, cv) = prover.output_proof(
+            ctx,
+            encryptor.esk().clone(),
+            self.to,
+            self.note.r,
+            self.note.value,
+        );
+
+        let cmu = self.note.cm(&JUBJUB);
+
+        let enc_ciphertext = encryptor.encrypt_note_plaintext();
+        let out_ciphertext = encryptor.encrypt_outgoing_plaintext(&cv, &cmu);
+
+        let ephemeral_key = encryptor.epk().clone().into();
+
+        OutputDescription {
+            cv,
+            cmu,
+            ephemeral_key,
+            enc_ciphertext,
+            out_ciphertext,
+            zkproof,
+        }
+    }
 }
 
 /// Metadata about a transaction created by a [`Builder`].
@@ -110,7 +177,7 @@ pub struct Builder {
     fee: Amount,
     anchor: Option<Fr>,
     spends: Vec<SpendDescriptionInfo>,
-    outputs: Vec<OutputDescriptionInfo>,
+    outputs: Vec<SaplingOutput>,
     change_address: Option<(OutgoingViewingKey, PaymentAddress<Bls12>)>,
 }
 
@@ -184,30 +251,11 @@ impl Builder {
         value: Amount,
         memo: Option<Memo>,
     ) -> Result<(), Error> {
-        let g_d = match to.g_d(&JUBJUB) {
-            Some(g_d) => g_d,
-            None => return Err(Error(ErrorKind::InvalidAddress)),
-        };
-        if value.0 < 0 {
-            return Err(Error(ErrorKind::InvalidAmount));
-        }
-
-        let rcm = Fs::rand(&mut self.rng);
+        let output = SaplingOutput::new(&mut self.rng, ovk, to, value, memo)?;
 
         self.mtx.value_balance.0 -= value.0;
 
-        let note = Note {
-            g_d,
-            pk_d: to.pk_d.clone(),
-            value: value.0 as u64,
-            r: rcm,
-        };
-        self.outputs.push(OutputDescriptionInfo {
-            ovk,
-            to,
-            note,
-            memo: memo.unwrap_or_default(),
-        });
+        self.outputs.push(output);
 
         Ok(())
     }
@@ -370,36 +418,7 @@ impl Builder {
                 // Record the post-randomized output location
                 tx_metadata.output_indices[pos] = i;
 
-                let encryptor = SaplingNoteEncryption::new(
-                    output.ovk,
-                    output.note.clone(),
-                    output.to.clone(),
-                    output.memo,
-                );
-
-                let (zkproof, cv) = prover.output_proof(
-                    &mut ctx,
-                    encryptor.esk().clone(),
-                    output.to,
-                    output.note.r,
-                    output.note.value,
-                );
-
-                let cmu = output.note.cm(&JUBJUB);
-
-                let enc_ciphertext = encryptor.encrypt_note_plaintext();
-                let out_ciphertext = encryptor.encrypt_outgoing_plaintext(&cv, &cmu);
-
-                let ephemeral_key = encryptor.epk().clone().into();
-
-                OutputDescription {
-                    cv,
-                    cmu,
-                    ephemeral_key,
-                    enc_ciphertext,
-                    out_ciphertext,
-                    zkproof,
-                }
+                output.build(&prover, &mut ctx)
             } else {
                 // This is a dummy output
                 let (dummy_to, dummy_note) = {
