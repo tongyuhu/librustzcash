@@ -39,15 +39,15 @@ impl From<TransparentAddress> for RecipientAddress {
 }
 
 impl RecipientAddress {
-    pub fn from_str(s: &str) -> Result<Option<Self>, Error> {
-        if let Some(pa) = decode_payment_address(HRP_SAPLING_PAYMENT_ADDRESS, s)? {
-            Ok(Some(RecipientAddress::Shielded(pa)))
-        } else if let Some(addr) =
-            decode_transparent_address(&B58_PUBKEY_ADDRESS_PREFIX, &B58_SCRIPT_ADDRESS_PREFIX, s)?
+    pub fn from_str(s: &str) -> Option<Self> {
+        if let Ok(Some(pa)) = decode_payment_address(HRP_SAPLING_PAYMENT_ADDRESS, s) {
+            Some(pa.into())
+        } else if let Ok(Some(addr)) =
+            decode_transparent_address(&B58_PUBKEY_ADDRESS_PREFIX, &B58_SCRIPT_ADDRESS_PREFIX, s)
         {
-            Ok(Some(RecipientAddress::Transparent(addr)))
+            Some(addr.into())
         } else {
-            Ok(None)
+            None
         }
     }
 
