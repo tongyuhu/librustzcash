@@ -62,7 +62,7 @@ use zcash_proofs::{
     circuit::sapling::TREE_DEPTH as SAPLING_TREE_DEPTH,
     load_parameters,
     sapling::{SaplingProvingContext, SaplingVerificationContext},
-    sprout,
+    sprout, zip304,
 };
 
 use zcash_mmr::{Entry as MMREntry, NodeData as MMRNodeData, Tree as MMRTree};
@@ -1339,4 +1339,66 @@ pub extern "system" fn librustzcash_mmr_hash_node(
     }
 
     0
+}
+
+#[no_mangle]
+pub extern "system" fn librustzcash_zip304_signmessage(
+    extsk: *const [c_uchar; 169],
+    addr: *const [c_uchar; 43],
+    coin_type: u32,
+    message: *const c_char,
+    signature_ret: *mut [c_uchar; 320],
+) -> bool {
+    let extsk = zip32::ExtendedSpendingKey::read(&unsafe { *extsk }[..])
+        .expect("valid ExtendedSpendingKey");
+    let payment_address = match PaymentAddress::<Bls12>::from_bytes(unsafe { &*addr }, &JUBJUB) {
+        Some(pa) => pa,
+        None => return false,
+    };
+    let message = unsafe { CStr::from_ptr(message) }
+        .to_str()
+        .expect("message should be a valid string");
+
+    let signature = zip304::sign_message(
+        extsk.expsk,
+        payment_address,
+        coin_type,
+        message,
+        unsafe { SAPLING_SPEND_PARAMS.as_ref() }.unwrap(),
+        &JUBJUB,
+    );
+
+    let signature_ret = unsafe { &mut *signature_ret };
+    signature_ret.copy_from_slice(&signature.to_bytes());
+    true
+}
+
+#[no_mangle]
+pub extern "system" fn librustzcash_zip304_verifymessage(
+    addr: *const [c_uchar; 43],
+    coin_type: u32,
+    message: *const c_char,
+    signature: *const [c_uchar; 320],
+) -> bool {
+    let payment_address = match PaymentAddress::<Bls12>::from_bytes(unsafe { &*addr }, &JUBJUB) {
+        Some(pa) => pa,
+        None => return false,
+    };
+    let message = unsafe { CStr::from_ptr(message) }
+        .to_str()
+        .expect("message should be a valid string");
+    let signature = match zip304::Signature::from_bytes(unsafe { &*signature }, &JUBJUB) {
+        Some(sig) => sig,
+        None => return false,
+    };
+
+    zip304::verify_message(
+        &payment_address,
+        coin_type,
+        message,
+        &signature,
+        unsafe { SAPLING_SPEND_VK.as_ref() }.unwrap(),
+        &JUBJUB,
+    )
+    .is_ok()
 }
