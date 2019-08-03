@@ -16,6 +16,7 @@ pub mod circuit;
 mod hashreader;
 pub mod sapling;
 pub mod sprout;
+pub mod zip304;
 
 #[cfg(feature = "local-prover")]
 pub mod prover;
