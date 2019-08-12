@@ -17,6 +17,7 @@ use zcash_proofs::circuit::sapling::{
     Spend
 };
 use zcash_primitives::primitives::{
+    AssetType,
     Diversifier,
     ProofGenerationKey,
     ValueCommitment
@@ -55,6 +56,7 @@ fn main() {
     let mut total_time = Duration::new(0, 0);
     for _ in 0..SAMPLES {
         let value_commitment = ValueCommitment {
+            asset_type: AssetType::Zcash,
             value: 1,
             randomness: fs::Fs::random(rng)
         };

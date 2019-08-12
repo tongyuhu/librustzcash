@@ -5,7 +5,7 @@ use pairing::bls12_381::{Bls12, Fr};
 use rand::{rngs::OsRng, seq::SliceRandom, CryptoRng, RngCore};
 use crate::{
     jubjub::fs::Fs,
-    primitives::{Diversifier, Note, PaymentAddress},
+    primitives::{AssetType, Diversifier, Note, PaymentAddress},
 };
 use zip32::ExtendedSpendingKey;
 
@@ -76,6 +76,7 @@ impl SaplingOutput {
         let rcm = Fs::random(rng);
 
         let note = Note {
+            asset_type: AssetType::Zcash,
             g_d,
             pk_d: to.pk_d.clone(),
             value: value.into(),
@@ -461,6 +462,7 @@ impl<R: RngCore + CryptoRng> Builder<R> {
                             pk_d: pk_d.clone(),
                         },
                         Note {
+                            asset_type: AssetType::Zcash,
                             g_d,
                             pk_d,
                             r: Fs::random(&mut self.rng),

@@ -24,8 +24,14 @@ use jubjub::{
 
 use blake2s_simd::Params as Blake2sParams;
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum AssetType {
+    Zcash,
+}
+
 #[derive(Clone)]
 pub struct ValueCommitment<E: JubjubEngine> {
+    pub asset_type: AssetType,
     pub value: u64,
     pub randomness: E::Fs
 }
@@ -163,6 +169,7 @@ impl<E: JubjubEngine> PaymentAddress<E> {
     {
         self.g_d(params).map(|g_d| {
             Note {
+                asset_type: AssetType::Zcash,
                 value: value,
                 r: randomness,
                 g_d: g_d,
@@ -174,6 +181,8 @@ impl<E: JubjubEngine> PaymentAddress<E> {
 
 #[derive(Clone, Debug)]
 pub struct Note<E: JubjubEngine> {
+    /// The asset type that the note represents
+    pub asset_type: AssetType,
     /// The value of the note
     pub value: u64,
     /// The diversified base of the address, GH(d)
@@ -186,7 +195,8 @@ pub struct Note<E: JubjubEngine> {
 
 impl<E: JubjubEngine> PartialEq for Note<E> {
     fn eq(&self, other: &Self) -> bool {
-        self.value == other.value
+        self.asset_type == other.asset_type
+            && self.value == other.value
             && self.g_d == other.g_d
             && self.pk_d == other.pk_d
             && self.r == other.r

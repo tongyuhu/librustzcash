@@ -78,7 +78,7 @@ pub(crate) mod mock {
 
     use crate::{
         jubjub::{edwards, fs::Fs, FixedGenerators, Unknown},
-        primitives::{Diversifier, PaymentAddress, ProofGenerationKey, ValueCommitment},
+        primitives::{AssetType, Diversifier, PaymentAddress, ProofGenerationKey, ValueCommitment},
     };
 
     use crate::{
@@ -120,6 +120,7 @@ pub(crate) mod mock {
             let mut rng = OsRng;
 
             let cv = ValueCommitment::<Bls12> {
+                asset_type: AssetType::Zcash,
                 value,
                 randomness: Fs::random(&mut rng),
             }
@@ -146,6 +147,7 @@ pub(crate) mod mock {
             let mut rng = OsRng;
 
             let cv = ValueCommitment::<Bls12> {
+                asset_type: AssetType::Zcash,
                 value,
                 randomness: Fs::random(&mut rng),
             }

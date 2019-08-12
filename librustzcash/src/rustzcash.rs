@@ -60,7 +60,7 @@ use zcash_primitives::{
     merkle_tree::CommitmentTreeWitness,
     note_encryption::sapling_ka_agree,
     primitives::{
-        Diversifier, Note, PaymentAddress, ProofGenerationKey, ViewingKey,
+        AssetType, Diversifier, Note, PaymentAddress, ProofGenerationKey, ViewingKey,
     },
     redjubjub::{self, Signature},
     sapling::{merkle_hash, spend_sig},
@@ -432,6 +432,7 @@ fn priv_get_note(
     };
 
     let note = Note {
+        asset_type: AssetType::Zcash,
         value,
         g_d,
         pk_d,
