@@ -5,7 +5,7 @@ use directories::BaseDirs;
 use pairing::bls12_381::{Bls12, Fr};
 use zcash_primitives::{
     jubjub::{edwards, fs::Fs, Unknown},
-    primitives::{Diversifier, PaymentAddress, ProofGenerationKey},
+    primitives::{AssetType, Diversifier, PaymentAddress, ProofGenerationKey},
 };
 use std::path::Path;
 use zcash_primitives::{
@@ -141,6 +141,7 @@ impl TxProver for LocalTxProver {
             diversifier,
             rcm,
             ar,
+            AssetType::Zcash,
             value,
             anchor,
             witness,
@@ -169,6 +170,7 @@ impl TxProver for LocalTxProver {
             esk,
             payment_address,
             rcm,
+            AssetType::Zcash,
             value,
             &self.output_params,
             &JUBJUB,

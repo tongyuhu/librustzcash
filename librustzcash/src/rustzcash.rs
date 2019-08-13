@@ -406,6 +406,7 @@ pub extern "system" fn librustzcash_sapling_generate_r(result: *mut [c_uchar; 32
 fn priv_get_note(
     diversifier: *const [c_uchar; 11],
     pk_d: *const [c_uchar; 32],
+    asset_type: u32,
     value: u64,
     r: *const [c_uchar; 32],
 ) -> Result<Note<Bls12>, ()> {
@@ -425,6 +426,11 @@ fn priv_get_note(
         None => return Err(()),
     };
 
+    let asset_type = match AssetType::from_note_plaintext(asset_type) {
+        Some(a) => a,
+        None => return Err(()),
+    };
+
     // Deserialize randomness
     let r = match Fs::from_repr(read_fs(&(unsafe { &*r })[..])) {
         Ok(r) => r,
@@ -432,7 +438,7 @@ fn priv_get_note(
     };
 
     let note = Note {
-        asset_type: AssetType::Zcash,
+        asset_type,
         value,
         g_d,
         pk_d,
@@ -447,6 +453,7 @@ fn priv_get_note(
 pub extern "system" fn librustzcash_sapling_compute_nf(
     diversifier: *const [c_uchar; 11],
     pk_d: *const [c_uchar; 32],
+    asset_type: u32,
     value: u64,
     r: *const [c_uchar; 32],
     ak: *const [c_uchar; 32],
@@ -454,7 +461,7 @@ pub extern "system" fn librustzcash_sapling_compute_nf(
     position: u64,
     result: *mut [c_uchar; 32],
 ) -> bool {
-    let note = match priv_get_note(diversifier, pk_d, value, r) {
+    let note = match priv_get_note(diversifier, pk_d, asset_type, value, r) {
         Ok(p) => p,
         Err(_) => return false,
     };
@@ -492,11 +499,12 @@ pub extern "system" fn librustzcash_sapling_compute_nf(
 pub extern "system" fn librustzcash_sapling_compute_cm(
     diversifier: *const [c_uchar; 11],
     pk_d: *const [c_uchar; 32],
+    asset_type: u32,
     value: u64,
     r: *const [c_uchar; 32],
     result: *mut [c_uchar; 32],
 ) -> bool {
-    let note = match priv_get_note(diversifier, pk_d, value, r) {
+    let note = match priv_get_note(diversifier, pk_d, asset_type, value, r) {
         Ok(p) => p,
         Err(_) => return false,
     };
@@ -931,6 +939,7 @@ pub extern "system" fn librustzcash_sapling_output_proof(
     diversifier: *const [c_uchar; 11],
     pk_d: *const [c_uchar; 32],
     rcm: *const [c_uchar; 32],
+    asset_type: u32,
     value: u64,
     cv: *mut [c_uchar; 32],
     zkproof: *mut [c_uchar; GROTH_PROOF_SIZE],
@@ -968,11 +977,17 @@ pub extern "system" fn librustzcash_sapling_output_proof(
         Err(_) => return false,
     };
 
+    let asset_type = match AssetType::from_note_plaintext(asset_type) {
+        Some(a) => a,
+        None => return false,
+    };
+
     // Create proof
     let (proof, value_commitment) = unsafe { &mut *ctx }.output_proof(
         esk,
         payment_address,
         rcm,
+        asset_type,
         value,
         unsafe { SAPLING_OUTPUT_PARAMS.as_ref() }.unwrap(),
         &JUBJUB,
@@ -1056,6 +1071,7 @@ pub extern "system" fn librustzcash_sapling_spend_proof(
     diversifier: *const [c_uchar; 11],
     rcm: *const [c_uchar; 32],
     ar: *const [c_uchar; 32],
+    asset_type: u32,
     value: u64,
     anchor: *const [c_uchar; 32],
     witness: *const [c_uchar; 1 + 33 * SAPLING_TREE_DEPTH + 8],
@@ -1102,6 +1118,11 @@ pub extern "system" fn librustzcash_sapling_spend_proof(
         Err(_) => return false,
     };
 
+    let asset_type = match AssetType::from_note_plaintext(asset_type) {
+        Some(a) => a,
+        None => return false,
+    };
+
     // We need to compute the anchor of the Spend.
     let anchor = match Fr::from_repr(read_le(unsafe { &(&*anchor)[..] })) {
         Ok(p) => p,
@@ -1122,6 +1143,7 @@ pub extern "system" fn librustzcash_sapling_spend_proof(
             diversifier,
             rcm,
             ar,
+            asset_type,
             value,
             anchor,
             witness,

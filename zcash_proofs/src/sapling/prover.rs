@@ -45,6 +45,7 @@ impl SaplingProvingContext {
         diversifier: Diversifier,
         rcm: Fs,
         ar: Fs,
+        asset_type: AssetType,
         value: u64,
         anchor: Fr,
         witness: CommitmentTreeWitness<Node>,
@@ -76,7 +77,7 @@ impl SaplingProvingContext {
 
         // Construct the value commitment
         let value_commitment = ValueCommitment::<Bls12> {
-            asset_type: AssetType::Zcash,
+            asset_type,
             value: value,
             randomness: rcv,
         };
@@ -99,7 +100,7 @@ impl SaplingProvingContext {
 
         // Let's compute the nullifier while we have the position
         let note = Note {
-            asset_type: AssetType::Zcash,
+            asset_type,
             value: value,
             g_d: diversifier
                 .g_d::<Bls12>(params)
@@ -190,6 +191,7 @@ impl SaplingProvingContext {
         esk: Fs,
         payment_address: PaymentAddress<Bls12>,
         rcm: Fs,
+        asset_type: AssetType,
         value: u64,
         proving_key: &Parameters<Bls12>,
         params: &JubjubBls12,
@@ -214,7 +216,7 @@ impl SaplingProvingContext {
 
         // Construct the value commitment for the proof instance
         let value_commitment = ValueCommitment::<Bls12> {
-            asset_type: AssetType::Zcash,
+            asset_type,
             value: value,
             randomness: rcv,
         };
