@@ -80,7 +80,7 @@ fn expose_value_commitment<E, CS>(
     mut cs: CS,
     value_commitment: Option<ValueCommitment<E>>,
     params: &E::Params
-) -> Result<Vec<boolean::Boolean>, SynthesisError>
+) -> Result<(Vec<boolean::Boolean>, Vec<boolean::Boolean>), SynthesisError>
     where E: JubjubEngine,
           CS: ConstraintSystem<E>
 {
@@ -95,6 +95,11 @@ fn expose_value_commitment<E, CS>(
     asset_type.assert_not_small_order(
         cs.namespace(|| "asset_type not small order"),
         params
+    )?;
+
+    // Booleanize the asset type
+    let asset_type_bits = asset_type.repr(
+        cs.namespace(|| "unpack asset_type")
     )?;
 
     // Booleanize the value into little-endian bit order
@@ -136,7 +141,7 @@ fn expose_value_commitment<E, CS>(
     // Expose the commitment as an input to the circuit
     cv.inputize(cs.namespace(|| "commitment point"))?;
 
-    Ok(value_bits)
+    Ok((asset_type_bits, value_bits))
 }
 
 impl<'a, E: JubjubEngine> Circuit<E> for Spend<'a, E> {
@@ -272,7 +277,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for Spend<'a, E> {
         )?;
 
         // Compute note contents:
-        // value (in big endian) followed by g_d and pk_d
+        // asset_type || value || g_d || pk_d
         let mut note_contents = vec![];
 
         // Handle the value; we'll need it later for the
@@ -280,7 +285,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for Spend<'a, E> {
         let mut value_num = num::Num::zero();
         {
             // Get the value in little-endian bit order
-            let value_bits = expose_value_commitment(
+            let (asset_type_bits, value_bits) = expose_value_commitment(
                 cs.namespace(|| "value commitment"),
                 self.value_commitment,
                 self.params
@@ -298,6 +303,9 @@ impl<'a, E: JubjubEngine> Circuit<E> for Spend<'a, E> {
                 coeff.double();
             }
 
+            // Place the asset type in the note
+            note_contents.extend(asset_type_bits);
+
             // Place the value in the note
             note_contents.extend(value_bits);
         }
@@ -314,6 +322,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for Spend<'a, E> {
 
         assert_eq!(
             note_contents.len(),
+            256 + // asset_type
             64 + // value
             256 + // g_d
             256 // p_d
@@ -474,17 +483,22 @@ impl<'a, E: JubjubEngine> Circuit<E> for Spend<'a, E> {
 impl<'a, E: JubjubEngine> Circuit<E> for Output<'a, E> {
     fn synthesize<CS: ConstraintSystem<E>>(self, cs: &mut CS) -> Result<(), SynthesisError>
     {
-        // Let's start to construct our note, which contains
-        // value (big endian)
+        // Let's start to construct our note:
+        // asset_type || value || g_d || pk_d
         let mut note_contents = vec![];
 
-        // Expose the value commitment and place the value
-        // in the note.
-        note_contents.extend(expose_value_commitment(
+        // Expose the value commitment
+        let (asset_type_bits, value_bits) = expose_value_commitment(
             cs.namespace(|| "value commitment"),
             self.value_commitment,
             self.params
-        )?);
+        )?;
+
+        // Place the asset type in the note
+        note_contents.extend(asset_type_bits);
+
+        // Place the value in the note
+        note_contents.extend(value_bits);
 
         // Let's deal with g_d
         {
@@ -562,6 +576,7 @@ impl<'a, E: JubjubEngine> Circuit<E> for Output<'a, E> {
 
         assert_eq!(
             note_contents.len(),
+            256 + // asset_type
             64 + // value
             256 + // g_d
             256 // pk_d

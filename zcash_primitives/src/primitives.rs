@@ -243,6 +243,12 @@ impl<E: JubjubEngine> Note<E> {
         // Calculate the note contents, as bytes
         let mut note_contents = vec![];
 
+        // Write the asset type
+        self.asset_type
+            .value_commitment_generator::<E>(params)
+            .write(&mut note_contents)
+            .unwrap();
+
         // Writing the value in little endian
         (&mut note_contents).write_u64::<LittleEndian>(self.value).unwrap();
 
@@ -252,7 +258,7 @@ impl<E: JubjubEngine> Note<E> {
         // Write pk_d
         self.pk_d.write(&mut note_contents).unwrap();
 
-        assert_eq!(note_contents.len(), 32 + 32 + 8);
+        assert_eq!(note_contents.len(), 32 + 32 + 32 + 8);
 
         // Compute the Pedersen hash of the note contents
         let hash_of_contents = pedersen_hash(
