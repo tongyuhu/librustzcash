@@ -27,12 +27,14 @@ use blake2s_simd::Params as Blake2sParams;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum AssetType {
     Zcash,
+    Str4dBucks,
 }
 
 impl AssetType {
     pub fn from_note_plaintext(id: u32) -> Option<AssetType> {
         match id {
             0 => Some(AssetType::Zcash),
+            1337 => Some(AssetType::Str4dBucks),
             _ => None,
         }
     }
@@ -40,6 +42,7 @@ impl AssetType {
     pub fn to_note_plaintext(&self) -> u32 {
         match *self {
             AssetType::Zcash => 0,
+            AssetType::Str4dBucks => 1337,
         }
     }
 
@@ -47,6 +50,7 @@ impl AssetType {
     fn tag(&self) -> &[u8] {
         match *self {
             AssetType::Zcash => b"v",
+            AssetType::Str4dBucks => b"str4dBucks",
         }
     }
 
