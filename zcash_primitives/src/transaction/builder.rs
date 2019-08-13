@@ -479,7 +479,7 @@ impl<R: RngCore + CryptoRng> Builder<R> {
 
                 let cmu = dummy_note.cm(&JUBJUB);
 
-                let mut enc_ciphertext = [0u8; 580];
+                let mut enc_ciphertext = [0u8; 584];
                 let mut out_ciphertext = [0u8; 80];
                 self.rng.fill_bytes(&mut enc_ciphertext[..]);
                 self.rng.fill_bytes(&mut out_ciphertext[..]);
@@ -543,6 +543,7 @@ mod tests {
     use crate::{
         legacy::TransparentAddress,
         merkle_tree::{CommitmentTree, IncrementalWitness},
+        primitives::AssetType,
         prover::mock::MockTxProver,
         sapling::Node,
         transaction::components::Amount,
@@ -632,7 +633,7 @@ mod tests {
         }
 
         let note1 = to
-            .create_note(59999, Fs::random(&mut rng), &JUBJUB)
+            .create_note(AssetType::Zcash, 59999, Fs::random(&mut rng), &JUBJUB)
             .unwrap();
         let cm1 = Node::new(note1.cm(&JUBJUB).into_repr());
         let mut tree = CommitmentTree::new();
@@ -671,7 +672,9 @@ mod tests {
             );
         }
 
-        let note2 = to.create_note(1, Fs::random(&mut rng), &JUBJUB).unwrap();
+        let note2 = to
+            .create_note(AssetType::Zcash, 1, Fs::random(&mut rng), &JUBJUB)
+            .unwrap();
         let cm2 = Node::new(note2.cm(&JUBJUB).into_repr());
         tree.append(cm2).unwrap();
         witness1.append(cm2).unwrap();

@@ -180,7 +180,7 @@ pub struct OutputDescription {
     pub cv: edwards::Point<Bls12, Unknown>,
     pub cmu: Fr,
     pub ephemeral_key: edwards::Point<Bls12, Unknown>,
-    pub enc_ciphertext: [u8; 580],
+    pub enc_ciphertext: [u8; 584],
     pub out_ciphertext: [u8; 80],
     pub zkproof: [u8; GROTH_PROOF_SIZE],
 }
@@ -215,7 +215,7 @@ impl OutputDescription {
         // - "Not small order" is enforced in SaplingVerificationContext::check_output()
         let ephemeral_key = edwards::Point::<Bls12, Unknown>::read(&mut reader, &JUBJUB)?;
 
-        let mut enc_ciphertext = [0; 580];
+        let mut enc_ciphertext = [0; 584];
         let mut out_ciphertext = [0; 80];
         reader.read_exact(&mut enc_ciphertext)?;
         reader.read_exact(&mut out_ciphertext)?;
