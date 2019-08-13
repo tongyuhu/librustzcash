@@ -2,7 +2,7 @@ use ff::{Field, PrimeField, PrimeFieldRepr};
 
 use constants;
 
-use group_hash::group_hash;
+use group_hash::{find_group_hash, group_hash};
 
 use pedersen_hash::{
     pedersen_hash,
@@ -29,6 +29,30 @@ pub enum AssetType {
     Zcash,
 }
 
+impl AssetType {
+    /// Returns the tag for this asset type.
+    fn tag(&self) -> &[u8] {
+        match *self {
+            AssetType::Zcash => b"v",
+        }
+    }
+
+    /// Returns the value commitment generator for this asset type.
+    ///
+    /// The generator is the canonical representation of the asset type within the
+    /// consensus rules.
+    pub fn value_commitment_generator<E: JubjubEngine>(
+        &self,
+        params: &E::Params,
+    ) -> edwards::Point<E, PrimeOrder> {
+        find_group_hash::<E>(
+            self.tag(),
+            constants::VALUE_COMMITMENT_GENERATOR_PERSONALIZATION,
+            params,
+        )
+    }
+}
+
 #[derive(Clone)]
 pub struct ValueCommitment<E: JubjubEngine> {
     pub asset_type: AssetType,
@@ -42,7 +66,7 @@ impl<E: JubjubEngine> ValueCommitment<E> {
         params: &E::Params
     ) -> edwards::Point<E, PrimeOrder>
     {
-        params.generator(FixedGenerators::ValueCommitmentValue)
+        self.asset_type.value_commitment_generator(params)
               .mul(self.value, params)
               .add(
                   &params.generator(FixedGenerators::ValueCommitmentRandomness)
