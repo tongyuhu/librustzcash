@@ -20,7 +20,7 @@
 use ff::{Field, PrimeField, SqrtField};
 use pairing::Engine;
 
-use group_hash::group_hash;
+use group_hash::find_group_hash;
 
 use constants;
 
@@ -206,33 +206,6 @@ impl JubjubBls12 {
             fixed_base_generators: vec![],
             fixed_base_circuit_generators: vec![],
         };
-
-        fn find_group_hash<E: JubjubEngine>(
-            m: &[u8],
-            personalization: &[u8; 8],
-            params: &E::Params
-        ) -> edwards::Point<E, PrimeOrder>
-        {
-            let mut tag = m.to_vec();
-            let i = tag.len();
-            tag.push(0u8);
-
-            loop {
-                let gh = group_hash(
-                    &tag,
-                    personalization,
-                    params
-                );
-
-                // We don't want to overflow and start reusing generators
-                assert!(tag[i] != u8::max_value());
-                tag[i] += 1;
-
-                if let Some(gh) = gh {
-                    break gh;
-                }
-            }
-        }
 
         // Create the bases for the Pedersen hashes
         {
