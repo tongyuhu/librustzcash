@@ -1,8 +1,11 @@
 use pairing::bls12_381::Bls12;
 use zcash_primitives::jubjub::{
-    edwards, fs::FsRepr, FixedGenerators, JubjubBls12, JubjubParams, Unknown,
+    edwards, fs::FsRepr, JubjubBls12, Unknown,
 };
-use zcash_primitives::transaction::components::Amount;
+use zcash_primitives::{
+    primitives::AssetType,
+    transaction::components::Amount,
+};
 
 mod prover;
 mod verifier;
@@ -12,6 +15,7 @@ pub use self::verifier::SaplingVerificationContext;
 
 // This function computes `value` in the exponent of the value commitment base
 fn compute_value_balance(
+    asset_type: AssetType,
     value: Amount,
     params: &JubjubBls12,
 ) -> Option<edwards::Point<Bls12, Unknown>> {
@@ -26,8 +30,8 @@ fn compute_value_balance(
     let is_negative = value.is_negative();
 
     // Compute it in the exponent
-    let mut value_balance = params
-        .generator(FixedGenerators::ValueCommitmentValue)
+    let mut value_balance = asset_type
+        .value_commitment_generator(params)
         .mul(FsRepr::from(abs), params);
 
     // Negate if necessary

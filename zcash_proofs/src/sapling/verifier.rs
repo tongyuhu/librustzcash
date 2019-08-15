@@ -7,6 +7,7 @@ use pairing::bls12_381::{Bls12, Fr};
 use zcash_primitives::jubjub::{edwards, FixedGenerators, JubjubBls12, Unknown};
 use zcash_primitives::{
     redjubjub::{PublicKey, Signature},
+    primitives::AssetType,
     transaction::components::Amount,
 };
 
@@ -172,6 +173,7 @@ impl SaplingVerificationContext {
     /// have been checked before calling this function.
     pub fn final_check(
         &self,
+        asset_type: AssetType,
         value_balance: Amount,
         sighash_value: &[u8; 32],
         binding_sig: Signature,
@@ -181,7 +183,7 @@ impl SaplingVerificationContext {
         let mut bvk = PublicKey(self.bvk.clone());
 
         // Compute value balance
-        let mut value_balance = match compute_value_balance(value_balance, params) {
+        let mut value_balance = match compute_value_balance(asset_type, value_balance, params) {
             Some(a) => a,
             None => return false,
         };

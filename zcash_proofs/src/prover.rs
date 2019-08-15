@@ -190,6 +190,6 @@ impl TxProver for LocalTxProver {
         value_balance: Amount,
         sighash: &[u8; 32],
     ) -> Result<Signature, ()> {
-        ctx.binding_sig(value_balance, sighash, &JUBJUB)
+        ctx.binding_sig(AssetType::Zcash, value_balance, sighash, &JUBJUB)
     }
 }

@@ -711,10 +711,16 @@ pub extern "system" fn librustzcash_sapling_check_output(
 #[no_mangle]
 pub extern "system" fn librustzcash_sapling_final_check(
     ctx: *mut SaplingVerificationContext,
+    asset_type: u32,
     value_balance: i64,
     binding_sig: *const [c_uchar; 64],
     sighash_value: *const [c_uchar; 32],
 ) -> bool {
+    let asset_type = match AssetType::from_note_plaintext(asset_type) {
+        Some(a) => a,
+        None => return false,
+    };
+
     let value_balance = match Amount::from_i64(value_balance) {
         Ok(vb) => vb,
         Err(()) => return false,
@@ -727,6 +733,7 @@ pub extern "system" fn librustzcash_sapling_final_check(
     };
 
     unsafe { &*ctx }.final_check(
+        asset_type,
         value_balance,
         unsafe { &*sighash_value },
         binding_sig,
@@ -1041,17 +1048,23 @@ pub extern "system" fn librustzcash_sapling_spend_sig(
 #[no_mangle]
 pub extern "system" fn librustzcash_sapling_binding_sig(
     ctx: *const SaplingProvingContext,
+    asset_type: u32,
     value_balance: i64,
     sighash: *const [c_uchar; 32],
     result: *mut [c_uchar; 64],
 ) -> bool {
+    let asset_type = match AssetType::from_note_plaintext(asset_type) {
+        Some(a) => a,
+        None => return false,
+    };
+
     let value_balance = match Amount::from_i64(value_balance) {
         Ok(vb) => vb,
         Err(()) => return false,
     };
 
     // Sign
-    let sig = match unsafe { &*ctx }.binding_sig(value_balance, unsafe { &*sighash }, &JUBJUB) {
+    let sig = match unsafe { &*ctx }.binding_sig(asset_type, value_balance, unsafe { &*sighash }, &JUBJUB) {
         Ok(s) => s,
         Err(_) => return false,
     };
