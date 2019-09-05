@@ -308,6 +308,20 @@ extern "C" {
         unsigned char *j_ret,
         unsigned char *addr_ret
     );
+
+    /// Initializes the tracing crate.
+    void librustzcash_tracing_init();
+
+    /// Log an error message.
+    void librustzcash_tracing_error(
+        const char* message
+    );
+
+    /// Log a message.
+    void librustzcash_tracing_log(
+        const char* category,
+        const char* message
+    );
 }
 
 #endif // LIBRUSTZCASH_INCLUDE_H_
