@@ -1243,11 +1243,51 @@ pub extern "system" fn librustzcash_zip32_xfvk_address(
 }
 
 #[no_mangle]
-pub extern "system" fn librustzcash_tracing_init() {
-    let subscriber = tracing_subscriber::FmtSubscriber::builder()
+pub extern "system" fn librustzcash_tracing_init(
+    directives: *const c_char,
+) -> *mut tracing_subscriber::reload::Handle<
+    tracing_subscriber::filter::Filter,
+    tracing_subscriber::fmt::Subscriber,
+> {
+    let directives = unsafe { CStr::from_ptr(directives) }.to_str().unwrap();
+
+    let filter = tracing_subscriber::filter::Filter::new(directives);
+
+    let builder = tracing_subscriber::FmtSubscriber::builder()
         .with_ansi(true)
-        .finish();
+        .with_filter(filter)
+        .with_filter_reloading();
+    let handle = Box::new(builder.reload_handle());
+    let subscriber = builder.finish();
+
     tracing::subscriber::set_global_default(subscriber).unwrap();
+
+    Box::into_raw(handle)
+}
+
+#[no_mangle]
+pub extern "system" fn librustzcash_tracing_free(
+    handle: *mut tracing_subscriber::reload::Handle<
+        tracing_subscriber::filter::Filter,
+        tracing_subscriber::fmt::Subscriber,
+    >,
+) {
+    drop(unsafe { Box::from_raw(handle) });
+}
+
+#[no_mangle]
+pub extern "system" fn librustzcash_tracing_reload(
+    handle: *mut tracing_subscriber::reload::Handle<
+        tracing_subscriber::filter::Filter,
+        tracing_subscriber::fmt::Subscriber,
+    >,
+    directives: *const c_char,
+) {
+    let handle = unsafe { &mut *handle };
+    let directives = unsafe { CStr::from_ptr(directives) }.to_str().unwrap();
+
+    let filter = tracing_subscriber::filter::Filter::new(directives);
+    handle.reload(filter).unwrap();
 }
 
 #[no_mangle]
