@@ -26,6 +26,7 @@ use lazy_static;
 use libc::{c_char, c_uchar, size_t};
 use pairing::bls12_381::{Bls12, Fr, FrRepr};
 use rand_core::{OsRng, RngCore};
+use static_assertions::const_assert_eq;
 use std::ffi::CStr;
 use std::fs::File;
 use std::io::BufReader;
@@ -69,6 +70,16 @@ use zcash_proofs::{
 
 #[cfg(test)]
 mod tests;
+
+pub const GROTH_PROOF_SIZE: usize = 48 // π_A
+    + 96 // π_B
+    + 48; // π_C
+
+pub const SPROUT_WITNESS_PATH_SIZE: usize = 966;
+pub const SAPLING_WITNESS_PATH_SIZE: usize = 1065;
+// cbindgen can't generate bindings for constants computed from other constants.
+const_assert_eq!(SPROUT_WITNESS_PATH_SIZE, 1 + 33 * SPROUT_TREE_DEPTH + 8);
+const_assert_eq!(SAPLING_WITNESS_PATH_SIZE, 1 + 33 * SAPLING_TREE_DEPTH + 8);
 
 static mut SAPLING_SPEND_VK: Option<PreparedVerifyingKey<Bls12>> = None;
 static mut SAPLING_OUTPUT_VK: Option<PreparedVerifyingKey<Bls12>> = None;
@@ -611,10 +622,6 @@ pub extern "C" fn librustzcash_sapling_verification_ctx_free(ctx: *mut SaplingVe
     drop(unsafe { Box::from_raw(ctx) });
 }
 
-const GROTH_PROOF_SIZE: usize = 48 // π_A
-    + 96 // π_B
-    + 48; // π_C
-
 /// Check the validity of a Sapling Spend description, accumulating the value
 /// commitment into the context.
 #[no_mangle]
@@ -759,14 +766,14 @@ pub extern "C" fn librustzcash_sprout_prove(
     in_value1: u64,
     in_rho1: *const [c_uchar; 32],
     in_r1: *const [c_uchar; 32],
-    in_auth1: *const [c_uchar; 1 + 33 * SPROUT_TREE_DEPTH + 8],
+    in_auth1: *const [c_uchar; SPROUT_WITNESS_PATH_SIZE],
 
     // Second input
     in_sk2: *const [c_uchar; 32],
     in_value2: u64,
     in_rho2: *const [c_uchar; 32],
     in_r2: *const [c_uchar; 32],
-    in_auth2: *const [c_uchar; 1 + 33 * SPROUT_TREE_DEPTH + 8],
+    in_auth2: *const [c_uchar; SPROUT_WITNESS_PATH_SIZE],
 
     // First output
     out_pk1: *const [c_uchar; 32],
@@ -1078,7 +1085,7 @@ pub extern "C" fn librustzcash_sapling_spend_proof(
     ar: *const [c_uchar; 32],
     value: u64,
     anchor: *const [c_uchar; 32],
-    witness: *const [c_uchar; 1 + 33 * SAPLING_TREE_DEPTH + 8],
+    witness: *const [c_uchar; SAPLING_WITNESS_PATH_SIZE],
     cv: *mut [c_uchar; 32],
     rk_out: *mut [c_uchar; 32],
     zkproof: *mut [c_uchar; GROTH_PROOF_SIZE],

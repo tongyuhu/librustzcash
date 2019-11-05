@@ -1,0 +1,9 @@
+language = "C++"
+include_guard = "LIBRUSTZCASH_INCLUDE_H_"
+
+[defines]
+"target_os = windows" = "WIN32"
+
+[parse]
+parse_deps = true
+include = ["zcash_proofs"]
