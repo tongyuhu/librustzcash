@@ -68,6 +68,8 @@ use crate::{
 #[derive(Debug)]
 pub enum ChainInvalidCause {
     PrevHashMismatch,
+    /// (expected_height, actual_height)
+    HeightMismatch(i32, i32),
 }
 
 struct CompactBlockRow {
@@ -138,7 +140,10 @@ pub fn validate_combined_chain<P: AsRef<Path>, Q: AsRef<Path>>(
 
         // Scanned blocks MUST be height-sequential.
         if row.height != (last_height - 1) {
-            return Err(Error(ErrorKind::InvalidHeight(last_height - 1, row.height)));
+            return Err(Error(ErrorKind::InvalidChain(
+                last_height - 1,
+                ChainInvalidCause::HeightMismatch(last_height - 1, row.height),
+            )));
         }
         last_height = row.height;
 
