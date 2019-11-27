@@ -188,8 +188,9 @@ mod tests {
     use rand_core::{OsRng, RngCore};
     use zcash_primitives::{
         jubjub::{fs::Fs, FixedGenerators, JubjubParams, ToUniform},
+        memo::Memo,
         merkle_tree::CommitmentTree,
-        note_encryption::{Memo, SaplingNoteEncryption},
+        note_encryption::SaplingNoteEncryption,
         primitives::Note,
         transaction::components::Amount,
         zip32::{ExtendedFullViewingKey, ExtendedSpendingKey},
