@@ -122,7 +122,8 @@ fn prf_ock(
 /// use zcash_primitives::{
 ///     jubjub::fs::Fs,
 ///     keys::OutgoingViewingKey,
-///     note_encryption::{Memo, SaplingNoteEncryption},
+///     memo::Memo,
+///     note_encryption::SaplingNoteEncryption,
 ///     primitives::{Diversifier, PaymentAddress, ValueCommitment},
 ///     JUBJUB,
 /// };
@@ -206,7 +207,7 @@ impl SaplingNoteEncryption {
             .into_repr()
             .write_le(&mut input[20..COMPACT_NOTE_SIZE])
             .unwrap();
-        input[COMPACT_NOTE_SIZE..NOTE_PLAINTEXT_SIZE].copy_from_slice(&self.memo.0);
+        input[COMPACT_NOTE_SIZE..NOTE_PLAINTEXT_SIZE].copy_from_slice(&self.memo.to_bytes());
 
         let mut output = [0u8; ENC_CIPHERTEXT_SIZE];
         assert_eq!(
@@ -319,7 +320,7 @@ pub fn try_sapling_note_decryption(
     let mut memo = [0u8; 512];
     memo.copy_from_slice(&plaintext[COMPACT_NOTE_SIZE..NOTE_PLAINTEXT_SIZE]);
 
-    Some((note, to, Memo(memo)))
+    Some((note, to, Memo::from_bytes(memo)))
 }
 
 /// Trial decryption of the compact note plaintext by the recipient for light clients.
@@ -439,7 +440,7 @@ pub fn try_sapling_output_recovery(
         return None;
     }
 
-    Some((note, to, Memo(memo)))
+    Some((note, to, Memo::from_bytes(memo)))
 }
 
 #[cfg(test)]
@@ -533,7 +534,7 @@ mod tests {
         let cmu = note.cm(&JUBJUB);
 
         let ovk = OutgoingViewingKey([0; 32]);
-        let ne = SaplingNoteEncryption::new(ovk, note, pa, Memo([0; 512]), rng);
+        let ne = SaplingNoteEncryption::new(ovk, note, pa, Memo::default(), rng);
         let epk = ne.epk();
         let enc_ciphertext = ne.encrypt_note_plaintext();
         let out_ciphertext = ne.encrypt_outgoing_plaintext(&cv, &cmu);
@@ -1142,7 +1143,7 @@ mod tests {
                 Some((decrypted_note, decrypted_to, decrypted_memo)) => {
                     assert_eq!(decrypted_note, note);
                     assert_eq!(decrypted_to, to);
-                    assert_eq!(&decrypted_memo.0[..], &tv.memo[..]);
+                    assert_eq!(&decrypted_memo.to_bytes()[..], &tv.memo[..]);
                 }
                 None => panic!("Note decryption failed"),
             }
@@ -1164,7 +1165,7 @@ mod tests {
                 Some((decrypted_note, decrypted_to, decrypted_memo)) => {
                     assert_eq!(decrypted_note, note);
                     assert_eq!(decrypted_to, to);
-                    assert_eq!(&decrypted_memo.0[..], &tv.memo[..]);
+                    assert_eq!(&decrypted_memo.to_bytes()[..], &tv.memo[..]);
                 }
                 None => panic!("Output recovery failed"),
             }
@@ -1173,7 +1174,8 @@ mod tests {
             // Test encryption
             //
 
-            let mut ne = SaplingNoteEncryption::new(ovk, note, to, Memo(tv.memo), &mut OsRng);
+            let mut ne =
+                SaplingNoteEncryption::new(ovk, note, to, Memo::from_bytes(tv.memo), &mut OsRng);
             // Swap in the ephemeral keypair from the test vectors
             ne.esk = esk;
             ne.epk = epk;

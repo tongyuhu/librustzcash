@@ -1,6 +1,7 @@
 //! Structs for handling encrypted memos.
 
 use std::fmt;
+use std::ops::Deref;
 use std::str;
 
 /// Format a byte array as a colon-delimited hex string.
@@ -24,73 +25,129 @@ where
     Ok(())
 }
 
+/// Type-safe wrapper around String to enforce memo length requirements.
+#[derive(Clone, PartialEq)]
+pub struct TextMemo(String);
+
+impl Deref for TextMemo {
+    type Target = str;
+
+    #[inline]
+    fn deref(&self) -> &str {
+        self.0.deref()
+    }
+}
+
+/// Some unknown memo format from ✨*the future*✨ that we can't parse.
+#[derive(Clone)]
+pub struct FutureMemo(Box<[u8; 512]>);
+
 /// An unencrypted memo received alongside a shielded note in a Zcash transaction.
 #[derive(Clone)]
-pub struct Memo(pub(crate) [u8; 512]);
+pub enum Memo {
+    /// An empty memo field.
+    Empty,
+    /// A memo field containing a UTF-8 string.
+    Text(TextMemo),
+    /// A future memo format.
+    Future(FutureMemo),
+    /// A memo field containing arbitrary bytes.
+    Arbitrary(Box<[u8; 511]>),
+}
 
 impl fmt::Debug for Memo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Memo(")?;
-        match self.to_utf8() {
-            Some(Ok(memo)) => write!(f, "\"{}\"", memo)?,
-            _ => fmt_colon_delimited_hex(f, &self.0[..])?,
+        match self {
+            Memo::Empty => write!(f, "Memo::Empty"),
+            Memo::Text(memo) => write!(f, "Memo::Text(\"{}\")", memo.0),
+            Memo::Future(bytes) => write!(f, "Memo::Future({:0x})", bytes.0[0]),
+            Memo::Arbitrary(bytes) => {
+                write!(f, "Memo::Arbitrary(")?;
+                fmt_colon_delimited_hex(f, &bytes[..])?;
+                write!(f, ")")
+            }
         }
-        write!(f, ")")
     }
 }
 
 impl Default for Memo {
     fn default() -> Self {
-        // Empty memo field indication per ZIP 302
-        let mut memo = [0u8; 512];
-        memo[0] = 0xF6;
-        Memo(memo)
+        Memo::Empty
     }
 }
 
 impl PartialEq for Memo {
     fn eq(&self, rhs: &Memo) -> bool {
-        self.0[..] == rhs.0[..]
+        match (self, rhs) {
+            (Memo::Empty, Memo::Empty) => true,
+            (Memo::Text(a), Memo::Text(b)) => a == b,
+            (Memo::Future(a), Memo::Future(b)) => a.0[..] == b.0[..],
+            (Memo::Arbitrary(a), Memo::Arbitrary(b)) => a[..] == b[..],
+            _ => false,
+        }
     }
 }
 
 impl Memo {
-    /// Returns a `Memo` containing the given slice, appending with zero bytes if
-    /// necessary, or `None` if the slice is too long. If the slice is empty,
-    /// `Memo::default` is returned.
-    pub fn from_bytes(memo: &[u8]) -> Option<Memo> {
-        if memo.is_empty() {
-            Some(Memo::default())
-        } else if memo.len() <= 512 {
-            let mut data = [0; 512];
-            data[0..memo.len()].copy_from_slice(memo);
-            Some(Memo(data))
-        } else {
-            // memo is too long
-            None
+    /// Parses a `Memo` from its ZIP 302 serialization.
+    ///
+    /// This API does **not** preserve the exact byte serialization of the memo. For
+    /// example, if the memo is a string containing invalid sequences:
+    /// ```
+    /// use zcash_primitives::memo::Memo;
+    ///
+    /// let text = b"Hello \xF0\x90\x80World";
+    /// let mut bytes = [0; 512];
+    /// bytes[..text.len()].copy_from_slice(text);
+    /// assert_ne!(Memo::from_bytes(bytes).to_bytes()[..], bytes[..]);
+    /// ```
+    pub fn from_bytes(bytes: [u8; 512]) -> Self {
+        match bytes[0] {
+            0xF6 => Memo::Empty,
+            0xF5 | 0xF7 | 0xF8 | 0xF9 | 0xFA | 0xFB | 0xFC | 0xFD | 0xFE => {
+                Memo::Future(FutureMemo(Box::new(bytes)))
+            }
+            0xFF => {
+                let mut memo = [0; 511];
+                memo.copy_from_slice(&bytes[1..]);
+                Memo::Arbitrary(Box::new(memo))
+            }
+            b => {
+                // Rust doesn't detect 'b if b <= 0xF4' as completing the match cases, so
+                // we use a catch-all and explicitly assert here to inhibit future bugs.
+                assert!(b <= 0xF4);
+
+                // Convert to UTF8, replacing invalid sequences with the replacement
+                // character U+FFFD
+                Memo::Text(TextMemo(
+                    String::from_utf8_lossy(&bytes)
+                        // Drop trailing zeroes
+                        .trim_end_matches(char::from(0))
+                        .to_owned(),
+                ))
+            }
         }
     }
 
-    /// Returns the underlying bytes of the `Memo`.
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.0[..]
-    }
-
-    /// Returns:
-    /// - `None` if the memo is not text
-    /// - `Some(Ok(memo))` if the memo contains a valid UTF-8 string
-    /// - `Some(Err(e))` if the memo contains invalid UTF-8
-    pub fn to_utf8(&self) -> Option<Result<String, str::Utf8Error>> {
-        // Check if it is a text or binary memo
-        if self.0[0] < 0xF5 {
-            // Check if it is valid UTF8
-            Some(str::from_utf8(&self.0).map(|memo| {
-                // Drop trailing zeroes
-                memo.trim_end_matches(char::from(0)).to_owned()
-            }))
-        } else {
-            None
+    /// Serializes the `Memo` per ZIP 302.
+    pub fn to_bytes(&self) -> [u8; 512] {
+        let mut memo = [0u8; 512];
+        match self {
+            Memo::Empty => {
+                memo[0] = 0xF6;
+            }
+            Memo::Text(s) => {
+                let bytes = s.0.as_bytes();
+                // bytes.len() is guaranteed to be <= 512
+                memo[..bytes.len()].copy_from_slice(bytes);
+            }
+            Memo::Future(bytes) => memo.copy_from_slice(bytes.0.as_ref()),
+            Memo::Arbitrary(bytes) => {
+                memo[0] = 0xFF;
+                memo[1..].copy_from_slice(bytes.as_ref());
+            }
         }
+        memo
     }
 }
 
@@ -99,7 +156,13 @@ impl str::FromStr for Memo {
 
     /// Returns a `Memo` containing the given string, or an error if the string is too long.
     fn from_str(memo: &str) -> Result<Self, Self::Err> {
-        Memo::from_bytes(memo.as_bytes()).ok_or(())
+        if memo.is_empty() {
+            Ok(Memo::Empty)
+        } else if memo.as_bytes().len() <= 512 {
+            Ok(Memo::Text(TextMemo(memo.to_owned())))
+        } else {
+            Err(())
+        }
     }
 }
 
@@ -107,13 +170,13 @@ impl str::FromStr for Memo {
 mod tests {
     use std::str::FromStr;
 
-    use super::Memo;
+    use super::{FutureMemo, Memo};
 
     #[test]
     fn memo_from_str() {
         assert_eq!(
-            Memo::from_str("").unwrap(),
-            Memo([
+            Memo::from_str("").unwrap().to_bytes()[..],
+            [
                 0xf6, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -151,7 +214,7 @@ mod tests {
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-            ])
+            ][..]
         );
         assert_eq!(
             Memo::from_str(
@@ -163,8 +226,9 @@ mod tests {
                  meeeeeeeeeeeeeeeeeeemooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo \
                  but it's just short enough"
             )
-            .unwrap(),
-            Memo([
+            .unwrap()
+            .to_bytes()[..],
+            [
                 0x74, 0x68, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69,
                 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69,
                 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69, 0x69,
@@ -202,7 +266,7 @@ mod tests {
                 0x6f, 0x6f, 0x6f, 0x6f, 0x6f, 0x6f, 0x6f, 0x6f, 0x6f, 0x20, 0x62, 0x75, 0x74, 0x20,
                 0x69, 0x74, 0x27, 0x73, 0x20, 0x6a, 0x75, 0x73, 0x74, 0x20, 0x73, 0x68, 0x6f, 0x72,
                 0x74, 0x20, 0x65, 0x6e, 0x6f, 0x75, 0x67, 0x68
-            ])
+            ][..]
         );
         assert_eq!(
             Memo::from_str(
@@ -219,9 +283,21 @@ mod tests {
     }
 
     #[test]
-    fn memo_to_utf8() {
-        let memo = Memo::from_str("Test memo").unwrap();
-        assert_eq!(memo.to_utf8(), Some(Ok("Test memo".to_owned())));
-        assert_eq!(Memo::default().to_utf8(), None);
+    fn future_memo() {
+        let bytes = [0xFE; 512];
+        assert_eq!(
+            Memo::from_bytes(&bytes),
+            Ok(Memo::Future(FutureMemo(Box::new(bytes))))
+        );
+    }
+
+    #[test]
+    fn arbitrary_memo() {
+        let bytes = [42; 511];
+        let memo = Memo::Arbitrary(Box::new(bytes));
+        let encoded = memo.to_bytes();
+        assert_eq!(encoded[0], 0xFF);
+        assert_eq!(encoded[1..], bytes[..]);
+        assert_eq!(Memo::from_bytes(&encoded), Ok(memo));
     }
 }
