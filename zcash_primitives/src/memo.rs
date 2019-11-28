@@ -4,6 +4,9 @@ use std::fmt;
 use std::ops::Deref;
 use std::str;
 
+mod structured;
+pub use structured::{Payload, StructuredMemo};
+
 /// Format a byte array as a colon-delimited hex string.
 ///
 /// Source: https://github.com/tendermint/signatory
@@ -49,6 +52,8 @@ pub enum Memo {
     Empty,
     /// A memo field containing a UTF-8 string.
     Text(TextMemo),
+    /// A structured memo field containing one or more payloads.
+    Structured(StructuredMemo),
     /// A future memo format.
     Future(FutureMemo),
     /// A memo field containing arbitrary bytes.
@@ -60,6 +65,7 @@ impl fmt::Debug for Memo {
         match self {
             Memo::Empty => write!(f, "Memo::Empty"),
             Memo::Text(memo) => write!(f, "Memo::Text(\"{}\")", memo.0),
+            Memo::Structured(memo) => write!(f, "Memo::Structured({:?})", memo),
             Memo::Future(bytes) => write!(f, "Memo::Future({:0x})", bytes.0[0]),
             Memo::Arbitrary(bytes) => {
                 write!(f, "Memo::Arbitrary(")?;
@@ -81,6 +87,7 @@ impl PartialEq for Memo {
         match (self, rhs) {
             (Memo::Empty, Memo::Empty) => true,
             (Memo::Text(a), Memo::Text(b)) => a == b,
+            (Memo::Structured(a), Memo::Structured(b)) => a == b,
             (Memo::Future(a), Memo::Future(b)) => a.0[..] == b.0[..],
             (Memo::Arbitrary(a), Memo::Arbitrary(b)) => a[..] == b[..],
             _ => false,
@@ -111,8 +118,9 @@ impl Memo {
         }
 
         match bytes[0] {
+            0xF5 => StructuredMemo::parse(&bytes[1..]).map(Memo::Structured),
             0xF6 => Ok(Memo::Empty),
-            0xF5 | 0xF7 | 0xF8 | 0xF9 | 0xFA | 0xFB | 0xFC | 0xFD | 0xFE => {
+            0xF7 | 0xF8 | 0xF9 | 0xFA | 0xFB | 0xFC | 0xFD | 0xFE => {
                 let mut memo = [0u8; 512];
                 memo.copy_from_slice(bytes);
                 Ok(Memo::Future(FutureMemo(Box::new(memo))))
@@ -150,6 +158,10 @@ impl Memo {
                 let bytes = s.0.as_bytes();
                 // bytes.len() is guaranteed to be <= 512
                 memo[..bytes.len()].copy_from_slice(bytes);
+            }
+            Memo::Structured(s) => {
+                memo[0] = 0xF5;
+                s.serialize(&mut memo[1..]);
             }
             Memo::Future(bytes) => memo.copy_from_slice(bytes.0.as_ref()),
             Memo::Arbitrary(bytes) => {
