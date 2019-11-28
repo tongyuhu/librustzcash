@@ -91,6 +91,9 @@ impl PartialEq for Memo {
 impl Memo {
     /// Parses a `Memo` from its ZIP 302 serialization.
     ///
+    /// Returns an error if the provided slice does not represent a valid `Memo` (for
+    /// example, if the slice is not 512 bytes, or the encoded `Memo` is non-canonical).
+    ///
     /// This API does **not** preserve the exact byte serialization of the memo. For
     /// example, if the memo is a string containing invalid sequences:
     /// ```
@@ -99,18 +102,25 @@ impl Memo {
     /// let text = b"Hello \xF0\x90\x80World";
     /// let mut bytes = [0; 512];
     /// bytes[..text.len()].copy_from_slice(text);
-    /// assert_ne!(Memo::from_bytes(bytes).to_bytes()[..], bytes[..]);
+    /// assert_ne!(Memo::from_bytes(&bytes).unwrap().to_bytes()[..], bytes[..]);
     /// ```
-    pub fn from_bytes(bytes: [u8; 512]) -> Self {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, ()> {
+        // We accept a slice to avoid double-copying bytes.
+        if bytes.len() != 512 {
+            return Err(());
+        }
+
         match bytes[0] {
-            0xF6 => Memo::Empty,
+            0xF6 => Ok(Memo::Empty),
             0xF5 | 0xF7 | 0xF8 | 0xF9 | 0xFA | 0xFB | 0xFC | 0xFD | 0xFE => {
-                Memo::Future(FutureMemo(Box::new(bytes)))
+                let mut memo = [0u8; 512];
+                memo.copy_from_slice(bytes);
+                Ok(Memo::Future(FutureMemo(Box::new(memo))))
             }
             0xFF => {
                 let mut memo = [0; 511];
                 memo.copy_from_slice(&bytes[1..]);
-                Memo::Arbitrary(Box::new(memo))
+                Ok(Memo::Arbitrary(Box::new(memo)))
             }
             b => {
                 // Rust doesn't detect 'b if b <= 0xF4' as completing the match cases, so
@@ -119,12 +129,12 @@ impl Memo {
 
                 // Convert to UTF8, replacing invalid sequences with the replacement
                 // character U+FFFD
-                Memo::Text(TextMemo(
+                Ok(Memo::Text(TextMemo(
                     String::from_utf8_lossy(&bytes)
                         // Drop trailing zeroes
                         .trim_end_matches(char::from(0))
                         .to_owned(),
-                ))
+                )))
             }
         }
     }

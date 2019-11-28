@@ -317,10 +317,11 @@ pub fn try_sapling_note_decryption(
 
     let (note, to) = parse_note_plaintext_without_memo(ivk, cmu, &plaintext)?;
 
-    let mut memo = [0u8; 512];
-    memo.copy_from_slice(&plaintext[COMPACT_NOTE_SIZE..NOTE_PLAINTEXT_SIZE]);
+    // If the memo is invalid, treat it as empty but allow trial decryption to succeed.
+    let memo =
+        Memo::from_bytes(&plaintext[COMPACT_NOTE_SIZE..NOTE_PLAINTEXT_SIZE]).unwrap_or_default();
 
-    Some((note, to, Memo::from_bytes(memo)))
+    Some((note, to, memo))
 }
 
 /// Trial decryption of the compact note plaintext by the recipient for light clients.
@@ -419,8 +420,9 @@ pub fn try_sapling_output_recovery(
     rcm.read_le(&plaintext[20..COMPACT_NOTE_SIZE]).ok()?;
     let rcm = Fs::from_repr(rcm).ok()?;
 
-    let mut memo = [0u8; 512];
-    memo.copy_from_slice(&plaintext[COMPACT_NOTE_SIZE..NOTE_PLAINTEXT_SIZE]);
+    // If the memo is invalid, treat it as empty but allow trial decryption to succeed.
+    let memo =
+        Memo::from_bytes(&plaintext[COMPACT_NOTE_SIZE..NOTE_PLAINTEXT_SIZE]).unwrap_or_default();
 
     let diversifier = Diversifier(d);
     if diversifier
@@ -440,7 +442,7 @@ pub fn try_sapling_output_recovery(
         return None;
     }
 
-    Some((note, to, Memo::from_bytes(memo)))
+    Some((note, to, memo))
 }
 
 #[cfg(test)]
@@ -1174,8 +1176,13 @@ mod tests {
             // Test encryption
             //
 
-            let mut ne =
-                SaplingNoteEncryption::new(ovk, note, to, Memo::from_bytes(tv.memo), &mut OsRng);
+            let mut ne = SaplingNoteEncryption::new(
+                ovk,
+                note,
+                to,
+                Memo::from_bytes(&tv.memo).unwrap(),
+                &mut OsRng,
+            );
             // Swap in the ephemeral keypair from the test vectors
             ne.esk = esk;
             ne.epk = epk;
