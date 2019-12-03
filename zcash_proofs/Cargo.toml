@@ -6,7 +6,7 @@ authors = [
 ]
 
 [dependencies]
-bellman = { path = "../bellman" }
+bellman = { path = "../bellman", default-features = false, features = ["groth16"] }
 blake2b_simd = "0.5"
 byteorder = "1"
 directories = { version = "1", optional = true }
@@ -20,5 +20,6 @@ rand_core = "0.5"
 rand_xorshift = "0.2"
 
 [features]
-default = ["local-prover"]
+default = ["local-prover", "multicore"]
 local-prover = ["directories"]
+multicore = ["bellman/multicore"]
