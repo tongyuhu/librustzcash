@@ -1,10 +1,18 @@
 //! Handlers for structured memos.
 
+use pairing::bls12_381::Bls12;
 use wasabi_leb128::{ReadLeb128, WriteLeb128};
+
+use super::TextMemo;
+use crate::{primitives::PaymentAddress, JUBJUB};
 
 /// A payload within a [`StructuredMemo`].
 #[derive(Clone, Debug, PartialEq)]
 pub enum Payload {
+    /// A Sapling return address.
+    ReturnAddress(PaymentAddress<Bls12>),
+    /// UTF-8 text.
+    Text(TextMemo),
     /// A payload type we don't know about.
     Unknown {
         type_id: u64,
@@ -18,6 +26,36 @@ impl Payload {
     fn parse(mut bytes: &[u8]) -> Result<(&[u8], Option<Self>), ()> {
         match bytes.read_leb128().map_err(|_| ())? {
             0x00 => Ok((bytes, None)),
+            0x01 => {
+                let length: u16 = bytes.read_leb128().map_err(|_| ())?;
+                if length != 43 || length as usize > bytes.len() {
+                    return Err(());
+                }
+
+                let mut pa_bytes = [0; 43];
+                pa_bytes.copy_from_slice(&bytes[..43]);
+
+                PaymentAddress::<Bls12>::from_bytes(&pa_bytes, &JUBJUB)
+                    .ok_or(())
+                    .map(|pa| (&bytes[43..], Some(Payload::ReturnAddress(pa))))
+            }
+            0xa0 => {
+                let length: u16 = bytes.read_leb128().map_err(|_| ())?;
+                if length as usize > bytes.len() {
+                    return Err(());
+                }
+
+                let (value, rem) = bytes.split_at(length as usize);
+
+                // Convert to UTF8, replacing invalid sequences with the replacement
+                // character U+FFFD
+                Ok((
+                    rem,
+                    Some(Payload::Text(TextMemo(
+                        String::from_utf8_lossy(value).into(),
+                    ))),
+                ))
+            }
             type_id => {
                 let length: u16 = bytes.read_leb128().map_err(|_| ())?;
                 if length as usize > bytes.len() {
@@ -44,6 +82,13 @@ impl Payload {
     fn serialized_len(&self) -> usize {
         let mut buf = [0; wasabi_leb128::max_bytes::<u64>()];
         match self {
+            Payload::ReturnAddress(_) => 45,
+            Payload::Text(s) => {
+                let length_len = (&mut buf[..])
+                    .write_leb128(s.len())
+                    .expect("buffer is large enough");
+                1 + length_len + s.len()
+            }
             Payload::Unknown {
                 type_id, length, ..
             } => {
@@ -64,6 +109,19 @@ impl Payload {
     /// fit into `buf` by checking `serialized_len`.
     fn serialize<'a>(&self, mut buf: &'a mut [u8]) -> usize {
         match self {
+            Payload::ReturnAddress(pa) => {
+                let mut written = buf.write_leb128(0x01).expect("buffer is large enough");
+                written += buf.write_leb128(43).expect("buffer is large enough");
+                assert_eq!(written, 2);
+                buf[..43].copy_from_slice(&pa.to_bytes());
+                45
+            }
+            Payload::Text(s) => {
+                let mut written = buf.write_leb128(0xa0).expect("buffer is large enough");
+                written += buf.write_leb128(s.len()).expect("buffer is large enough");
+                buf[..s.len()].copy_from_slice(s.as_bytes());
+                written + s.len()
+            }
             Payload::Unknown {
                 type_id,
                 length,

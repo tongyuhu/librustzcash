@@ -4,6 +4,9 @@ use std::fmt;
 use std::ops::Deref;
 use std::str;
 
+mod builder;
+pub use builder::Builder;
+
 mod structured;
 pub use structured::{Payload, StructuredMemo};
 
@@ -29,7 +32,7 @@ where
 }
 
 /// Type-safe wrapper around String to enforce memo length requirements.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TextMemo(String);
 
 impl Deref for TextMemo {
@@ -64,7 +67,7 @@ impl fmt::Debug for Memo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Memo::Empty => write!(f, "Memo::Empty"),
-            Memo::Text(memo) => write!(f, "Memo::Text(\"{}\")", memo.0),
+            Memo::Text(memo) => write!(f, "Memo::Text({:?})", memo),
             Memo::Structured(memo) => write!(f, "Memo::Structured({:?})", memo),
             Memo::Future(bytes) => write!(f, "Memo::Future({:0x})", bytes.0[0]),
             Memo::Arbitrary(bytes) => {
