@@ -94,8 +94,7 @@ pub fn init_data_database<P: AsRef<Path>>(db_data: P) -> Result<(), Error> {
             spent INTEGER,
             FOREIGN KEY (tx) REFERENCES transactions(id_tx),
             FOREIGN KEY (account) REFERENCES accounts(account),
-            FOREIGN KEY (spent) REFERENCES transactions(id_tx),
-            CONSTRAINT tx_output UNIQUE (tx, output_index)
+            FOREIGN KEY (spent) REFERENCES transactions(id_tx)
         )",
         NO_PARAMS,
     )?;
