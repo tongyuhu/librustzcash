@@ -55,7 +55,7 @@ struct WitnessRow {
 /// ```
 /// use zcash_client_sqlite::scan::scan_cached_blocks;
 ///
-/// scan_cached_blocks("/path/to/cache.db", "/path/to/data.db");
+/// scan_cached_blocks("/path/to/cache.db", "/path/to/data.db", None);
 /// ```
 ///
 /// [`init_blocks_table`]: crate::init::init_blocks_table
