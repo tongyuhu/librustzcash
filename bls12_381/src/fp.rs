@@ -5,6 +5,8 @@ use core::convert::TryFrom;
 use core::fmt;
 use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
+use ff::{Field, PrimeField};
+use rand_core::RngCore;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 
 use crate::util::{adc, mac, sbb};
@@ -23,6 +25,12 @@ impl fmt::Debug for Fp {
             write!(f, "{:02x}", b)?;
         }
         Ok(())
+    }
+}
+
+impl fmt::Display for Fp {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
 
@@ -74,6 +82,15 @@ const MODULUS: [u64; 6] = [
     0x1a01_11ea_397f_e69a,
 ];
 
+const MODULUS_BYTES: [u8; 48] = [
+    0xab, 0xaa, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xb9, 0xff, 0xff, 0x53, 0xb1, 0xfe, 0xff, 0xab, 0x1e,
+    0x24, 0xf6, 0xb0, 0xf6, 0xa0, 0xd2, 0x30, 0x67, 0xbf, 0x12, 0x85, 0xf3, 0x84, 0x4b, 0x77, 0x64,
+    0xd7, 0xac, 0x4b, 0x43, 0xb6, 0xa7, 0x1b, 0x4b, 0x9a, 0xe6, 0x7f, 0x39, 0xea, 0x11, 0x01, 0x1a,
+];
+
+// The number of bits needed to represent the modulus.
+const MODULUS_BITS: u32 = 381;
+
 /// INV = -(p^{-1} mod 2^64) mod 2^64
 const INV: u64 = 0x89f3_fffc_fffc_fffd;
 
@@ -105,6 +122,29 @@ const R3: Fp = Fp([
     0x34c0_4e5e_921e_1761,
     0x2512_d435_6572_4728,
     0x0aa6_3460_9175_5d4d,
+]);
+
+// GENERATOR = 2 (multiplicative generator of p-1 order, that is also quadratic nonresidue)
+const GENERATOR: Fp = Fp([
+    0x3213_0000_0006_554f,
+    0xb93c_0018_d6c4_0005,
+    0x5760_5e0d_b0dd_bb51,
+    0x8b25_6521_ed1f_9bcb,
+    0x6cf2_8d79_0162_2c03,
+    0x11eb_ab9d_bb81_e28c,
+]);
+
+// 2^S * t = MODULUS - 1 with t odd
+const S: u32 = 1;
+
+// 2^S root of unity computed by GENERATOR^t
+const ROOT_OF_UNITY: Fp = Fp([
+    0x43f5_ffff_fffc_aaae,
+    0x32b7_fff2_ed47_fffd,
+    0x07e8_3a49_a2e9_9d69,
+    0xeca8_f331_8332_bb7a,
+    0xef14_8d1e_a0f4_c069,
+    0x040a_b326_3eff_0206,
 ]);
 
 impl<'a> Neg for &'a Fp {
@@ -590,6 +630,131 @@ impl Fp {
         let (t11, _) = adc(t11, 0, carry);
 
         Self::montgomery_reduce(t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11)
+    }
+}
+
+pub struct FpRepr([u8; 48]);
+
+impl fmt::Debug for FpRepr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "0x")?;
+        for &b in self.0.iter() {
+            write!(f, "{:02x}", b)?;
+        }
+        Ok(())
+    }
+}
+
+impl Default for FpRepr {
+    fn default() -> Self {
+        FpRepr([0; 48])
+    }
+}
+
+impl AsRef<[u8]> for FpRepr {
+    fn as_ref(&self) -> &[u8] {
+        &self.0[..]
+    }
+}
+
+impl AsMut<[u8]> for FpRepr {
+    fn as_mut(&mut self) -> &mut [u8] {
+        &mut self.0[..]
+    }
+}
+
+impl From<Fp> for FpRepr {
+    fn from(value: Fp) -> FpRepr {
+        value.to_repr()
+    }
+}
+
+impl<'a> From<&'a Fp> for FpRepr {
+    fn from(value: &'a Fp) -> FpRepr {
+        value.to_repr()
+    }
+}
+
+impl From<u64> for Fp {
+    fn from(val: u64) -> Fp {
+        Fp([val, 0, 0, 0, 0, 0]) * R2
+    }
+}
+
+impl Field for Fp {
+    fn random<R: RngCore + ?Sized>(rng: &mut R) -> Self {
+        let mut buf = [0; 96];
+        rng.fill_bytes(&mut buf);
+        Self::from_bytes_wide(&buf)
+    }
+
+    fn zero() -> Self {
+        Self::zero()
+    }
+
+    fn one() -> Self {
+        Self::one()
+    }
+
+    fn is_zero(&self) -> bool {
+        self.ct_eq(&Self::zero()).into()
+    }
+
+    #[must_use]
+    fn square(&self) -> Self {
+        self.square()
+    }
+
+    #[must_use]
+    fn double(&self) -> Self {
+        self.add(self)
+    }
+
+    fn invert(&self) -> CtOption<Self> {
+        self.invert()
+    }
+
+    fn sqrt(&self) -> CtOption<Self> {
+        self.sqrt()
+    }
+}
+
+impl PrimeField for Fp {
+    type Repr = FpRepr;
+    type ReprEndianness = byteorder::BigEndian;
+
+    fn from_repr(r: Self::Repr) -> Option<Self> {
+        let res = Self::from_bytes(&r.0);
+        if res.is_some().into() {
+            Some(res.unwrap())
+        } else {
+            None
+        }
+    }
+
+    fn to_repr(&self) -> Self::Repr {
+        FpRepr(self.to_bytes())
+    }
+
+    fn is_odd(&self) -> bool {
+        self.to_bytes()[0] & 1 == 1
+    }
+
+    fn char() -> Self::Repr {
+        FpRepr(MODULUS_BYTES)
+    }
+
+    const NUM_BITS: u32 = MODULUS_BITS;
+    const CAPACITY: u32 = Self::NUM_BITS - 1;
+
+    fn multiplicative_generator() -> Self {
+        GENERATOR
+    }
+
+    const S: u32 = S;
+
+    fn root_of_unity() -> Self {
+        ROOT_OF_UNITY
     }
 }
 
