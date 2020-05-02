@@ -97,6 +97,16 @@ const R2: Fp = Fp([
     0x1198_8fe5_92ca_e3aa,
 ]);
 
+/// R3 = 2^(384*3) mod p
+const R3: Fp = Fp([
+    0xed48_ac6b_d94c_a1e0,
+    0x315f_831e_03a7_adf8,
+    0x9a53_352a_615e_29dd,
+    0x34c0_4e5e_921e_1761,
+    0x2512_d435_6572_4728,
+    0x0aa6_3460_9175_5d4d,
+]);
+
 impl<'a> Neg for &'a Fp {
     type Output = Fp;
 
@@ -212,6 +222,44 @@ impl Fp {
         res[40..48].copy_from_slice(&tmp.0[0].to_be_bytes());
 
         res
+    }
+
+    /// Converts a 768-bit big endian integer into an `Fp` by reducing by the modulus.
+    pub fn from_bytes_wide(bytes: &[u8; 96]) -> Fp {
+        Fp::from_u768([
+            u64::from_be_bytes(<[u8; 8]>::try_from(&bytes[88..96]).unwrap()),
+            u64::from_be_bytes(<[u8; 8]>::try_from(&bytes[80..88]).unwrap()),
+            u64::from_be_bytes(<[u8; 8]>::try_from(&bytes[72..80]).unwrap()),
+            u64::from_be_bytes(<[u8; 8]>::try_from(&bytes[64..72]).unwrap()),
+            u64::from_be_bytes(<[u8; 8]>::try_from(&bytes[56..64]).unwrap()),
+            u64::from_be_bytes(<[u8; 8]>::try_from(&bytes[48..56]).unwrap()),
+            u64::from_be_bytes(<[u8; 8]>::try_from(&bytes[40..48]).unwrap()),
+            u64::from_be_bytes(<[u8; 8]>::try_from(&bytes[32..40]).unwrap()),
+            u64::from_be_bytes(<[u8; 8]>::try_from(&bytes[24..32]).unwrap()),
+            u64::from_be_bytes(<[u8; 8]>::try_from(&bytes[16..24]).unwrap()),
+            u64::from_be_bytes(<[u8; 8]>::try_from(&bytes[8..16]).unwrap()),
+            u64::from_be_bytes(<[u8; 8]>::try_from(&bytes[0..8]).unwrap()),
+        ])
+    }
+
+    fn from_u768(limbs: [u64; 12]) -> Fp {
+        // We reduce an arbitrary 768-bit number by decomposing it into two 384-bit digits
+        // with the higher bits multiplied by 2^384. Thus, we perform two reductions
+        //
+        // 1. the lower bits are multiplied by R^2, as normal
+        // 2. the upper bits are multiplied by R^2 * 2^384 = R^3
+        //
+        // and computing their sum in the field. It remains to see that arbitrary 384-bit
+        // numbers can be placed into Montgomery form safely using the reduction. The
+        // reduction works so long as the product is less than R=2^384 multipled by
+        // the modulus. This holds because for any `c` smaller than the modulus, we have
+        // that (2^384 - 1)*c is an acceptable product for the reduction. Therefore, the
+        // reduction always works so long as `c` is in the field; in this case it is either the
+        // constant `R2` or `R3`.
+        let d0 = Fp([limbs[0], limbs[1], limbs[2], limbs[3], limbs[4], limbs[5]]);
+        let d1 = Fp([limbs[6], limbs[7], limbs[8], limbs[9], limbs[10], limbs[11]]);
+        // Convert to Montgomery form
+        d0 * R2 + d1 * R3
     }
 
     /// Returns whether or not this element is strictly lexicographically
@@ -774,6 +822,86 @@ fn test_from_bytes() {
     );
 
     assert!(Fp::from_bytes(&[0xff; 48]).is_none().unwrap_u8() == 1);
+}
+
+#[test]
+fn test_from_u768_zero() {
+    assert_eq!(
+        Fp::zero(),
+        Fp::from_u768([
+            MODULUS[0], MODULUS[1], MODULUS[2], MODULUS[3], MODULUS[4], MODULUS[5], 0, 0, 0, 0, 0,
+            0
+        ])
+    );
+}
+
+#[test]
+fn test_from_u768_r() {
+    assert_eq!(R, Fp::from_u768([1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]));
+}
+
+#[test]
+fn test_from_u768_r2() {
+    assert_eq!(R2, Fp::from_u768([0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]));
+}
+
+#[test]
+fn test_from_u768_max() {
+    let max_u64 = 0xffff_ffff_ffff_ffff;
+    assert_eq!(
+        R3 - R,
+        Fp::from_u768([
+            max_u64, max_u64, max_u64, max_u64, max_u64, max_u64, max_u64, max_u64, max_u64,
+            max_u64, max_u64, max_u64
+        ])
+    );
+}
+
+#[test]
+fn test_from_bytes_wide_r2() {
+    assert_eq!(
+        R2,
+        Fp::from_bytes_wide(&[
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x15, 0xf6, 0x5e, 0xc3, 0xfa, 0x80, 0xe4, 0x93,
+            0x5c, 0x07, 0x1a, 0x97, 0xa2, 0x56, 0xec, 0x6d, 0x77, 0xce, 0x58, 0x53, 0x70, 0x52,
+            0x57, 0x45, 0x5f, 0x48, 0x98, 0x57, 0x53, 0xc7, 0x58, 0xba, 0xeb, 0xf4, 0x00, 0x0b,
+            0xc4, 0x0c, 0x00, 0x02, 0x76, 0x09, 0x00, 0x00, 0x00, 0x02, 0xff, 0xfd,
+        ])
+    );
+}
+
+#[test]
+fn test_from_bytes_wide_negative_one() {
+    assert_eq!(
+        -&Fp::one(),
+        Fp::from_bytes_wide(&[
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1a, 0x01, 0x11, 0xea, 0x39, 0x7f, 0xe6, 0x9a,
+            0x4b, 0x1b, 0xa7, 0xb6, 0x43, 0x4b, 0xac, 0xd7, 0x64, 0x77, 0x4b, 0x84, 0xf3, 0x85,
+            0x12, 0xbf, 0x67, 0x30, 0xd2, 0xa0, 0xf6, 0xb0, 0xf6, 0x24, 0x1e, 0xab, 0xff, 0xfe,
+            0xb1, 0x53, 0xff, 0xff, 0xb9, 0xfe, 0xff, 0xff, 0xff, 0xff, 0xaa, 0xaa,
+        ])
+    );
+}
+
+#[test]
+fn test_from_bytes_wide_maximum() {
+    assert_eq!(
+        Fp([
+            0x313e_ac6b_d949_4c8e,
+            0x6417_8310_f0ef_adf6,
+            0xa23b_6f74_0447_c746,
+            0x2169_4190_1550_d2db,
+            0x1427_6154_0667_0792,
+            0x0eb0_e786_d074_5f54,
+        ]),
+        Fp::from_bytes_wide(&[0xff; 96])
+    );
 }
 
 #[test]
