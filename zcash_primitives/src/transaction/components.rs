@@ -114,7 +114,7 @@ impl TxOut {
 #[derive(Debug)]
 pub struct TzeIn {
     pub prevout: OutPoint,
-    pub witness: tze::Witness,
+    pub witness: Option<tze::Witness>,
 }
 
 impl TzeIn {
@@ -127,20 +127,27 @@ impl TzeIn {
 
         Ok(TzeIn {
             prevout,
-            witness: tze::Witness {
+            witness: Some(tze::Witness {
                 extension_id,
                 mode,
                 payload,
-            },
+            }),
         })
     }
 
     pub fn write<W: Write>(&self, mut writer: W) -> io::Result<()> {
         self.prevout.write(&mut writer)?;
 
-        CompactSize::write(&mut writer, self.witness.extension_id)?;
-        CompactSize::write(&mut writer, self.witness.mode)?;
-        Vector::write(&mut writer, &self.witness.payload, |w, b| w.write_u8(*b))
+        if let Some(witness) = self.witness {
+            CompactSize::write(&mut writer, witness.extension_id)?;
+            CompactSize::write(&mut writer, witness.mode)?;
+            Vector::write(&mut writer, &witness.payload, |w, b| w.write_u8(*b))
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Missing TZE witness",
+            ))
+        }
     }
 }
 
@@ -178,7 +185,9 @@ impl TzeOut {
 
         CompactSize::write(&mut writer, self.precondition.extension_id)?;
         CompactSize::write(&mut writer, self.precondition.mode)?;
-        Vector::write(&mut writer, &self.precondition.payload, |w, b| w.write_u8(*b))
+        Vector::write(&mut writer, &self.precondition.payload, |w, b| {
+            w.write_u8(*b)
+        })
     }
 }
 

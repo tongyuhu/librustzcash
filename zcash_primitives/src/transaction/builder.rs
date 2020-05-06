@@ -8,6 +8,7 @@ use crate::{
 use ff::Field;
 use pairing::bls12_381::{Bls12, Fr};
 use rand::{rngs::OsRng, seq::SliceRandom, CryptoRng, RngCore};
+use zcash_extensions_api::transparent::{self as tze, ToPayload};
 
 use crate::{
     consensus,
@@ -19,7 +20,9 @@ use crate::{
     redjubjub::PrivateKey,
     sapling::{spend_sig, Node},
     transaction::{
-        components::{amount::DEFAULT_FEE, Amount, OutputDescription, SpendDescription, TxOut},
+        components::{
+            amount::DEFAULT_FEE, Amount, OutputDescription, SpendDescription, TxOut, TzeOut,
+        },
         signature_hash_data, Transaction, TransactionData, SIGHASH_ALL,
     },
     JUBJUB,
@@ -386,6 +389,30 @@ impl<R: RngCore + CryptoRng> Builder<R> {
         Ok(())
     }
 
+    pub fn add_tze_input() -> Result<(), Error> {}
+
+    pub fn add_tze_output<P: ToPayload>(
+        &mut self,
+        extension_id: usize,
+        to: &P,
+        value: Amount,
+    ) -> Result<(), Error> {
+        if value.is_negative() {
+            return Err(Error::InvalidAmount);
+        }
+
+        self.mtx.tze_outputs.push(TzeOut {
+            value,
+            precondition: to.to_payload().map(|(mode, payload)| tze::Precondition {
+                extension_id,
+                mode,
+                payload,
+            }),
+        });
+
+        Ok(())
+    }
+
     /// Adds a transparent coin to be spent in this transaction.
     #[cfg(feature = "transparent-inputs")]
     pub fn add_transparent_input(
@@ -448,6 +475,13 @@ impl<R: RngCore + CryptoRng> Builder<R> {
             - self
                 .mtx
                 .vout
+                .iter()
+                .map(|output| output.value)
+                .sum::<Amount>()
+            + self.tze_inputs.value_sum()
+            - self
+                .mtx
+                .tze_outputs
                 .iter()
                 .map(|output| output.value)
                 .sum::<Amount>();
@@ -622,6 +656,15 @@ impl<R: RngCore + CryptoRng> Builder<R> {
             self.mtx.shielded_outputs.push(output_desc);
         }
 
+        // Add placeholders for
+
+        // Add TZE outputs to mtx when we add them to the builder (maybe)
+
+        // We now have all effects within the transaction.
+
+        // TZE output contextual checks
+        tze::verify_outputs(&self.mtx, consensus_branch_id)?;
+
         //
         // Signatures
         //
@@ -649,6 +692,23 @@ impl<R: RngCore + CryptoRng> Builder<R> {
                 .binding_sig(&mut ctx, self.mtx.value_balance, &sighash)
                 .map_err(|()| Error::BindingSig)?,
         );
+
+        // Create TZE input witnesses
+        for (tze_input, tze_info) in self
+            .mtx
+            .tze_inputs
+            .iter_mut()
+            .zip(self.tze_inputs.into_iter())
+        {
+            // Need to enable witness to commit to the amount.
+            // - So hardware wallets "know" the amount without having to be sent all the
+            //   TZE outputs.
+            // The witness is expected to commit to the precommitment internally?
+            // (Or make it part of the sighash?)
+            // - TODO: Check whether transparent inputs committing to script_pubkey was
+            //   only so that hardware wallets "knew" what address was being spent from.
+            tze_input.witness = Some(tze_info.build()?);
+        }
 
         // Transparent signatures
         self.transparent_inputs

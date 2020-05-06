@@ -105,3 +105,32 @@ pub trait Extension<C> {
         )
     }
 }
+
+trait ExtensionBuilder {
+    fn add_tze_input();
+
+    fn add_tze_output<P: ToPayload>(
+        &mut self,
+        extension_id: usize,
+        to: &P,
+        value: Amount,
+    ) -> Result<(), Error>;
+}
+
+// In Bolt extension crate:
+trait BoltBuilder: ExtensionBuilder {
+    fn add_merchant_spend(&mut self, foo: ()) -> Result<(), Error> {
+        // Take parameters and generate TZE output payload.
+
+        // Get extension id from "somewhere"
+        let extension_id = ();
+
+        // Call through to the generic builder.
+        self.add_tze_output(extension_id, to, value)
+    }
+}
+
+impl<T> BoltBuilder for T where T: ExtensionBuilder {}
+
+impl ExtensionBuilder for TransactionBuilder {
+}
