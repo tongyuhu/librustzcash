@@ -40,6 +40,7 @@ pub trait TxProver {
         (
             [u8; GROTH_PROOF_SIZE],
             edwards::Point<Bls12, Unknown>,
+            Fs,
             PublicKey<Bls12>,
         ),
         (),
@@ -57,7 +58,7 @@ pub trait TxProver {
         payment_address: PaymentAddress<Bls12>,
         rcm: Fs,
         value: u64,
-    ) -> ([u8; GROTH_PROOF_SIZE], edwards::Point<Bls12, Unknown>);
+    ) -> ([u8; GROTH_PROOF_SIZE], edwards::Point<Bls12, Unknown>, Fs);
 
     /// Create the `bindingSig` for a Sapling transaction. All calls to
     /// [`TxProver::spend_proof`] and [`TxProver::output_proof`] must be completed before

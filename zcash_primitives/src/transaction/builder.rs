@@ -110,7 +110,7 @@ impl SaplingOutput {
             rng,
         );
 
-        let (zkproof, cv) = prover.output_proof(
+        let (zkproof, cv, _) = prover.output_proof(
             ctx,
             encryptor.esk().clone(),
             self.to,
@@ -525,7 +525,7 @@ impl<R: RngCore + CryptoRng> Builder<R> {
                     &JUBJUB,
                 ));
 
-                let (zkproof, cv, rk) = prover
+                let (zkproof, cv, _, rk) = prover
                     .spend_proof(
                         &mut ctx,
                         proof_generation_key,
@@ -599,7 +599,7 @@ impl<R: RngCore + CryptoRng> Builder<R> {
                 let esk = generate_esk(&mut self.rng);
                 let epk = dummy_note.g_d.mul(esk, &JUBJUB);
 
-                let (zkproof, cv) =
+                let (zkproof, cv, _) =
                     prover.output_proof(&mut ctx, esk, dummy_to, dummy_note.r, dummy_note.value);
 
                 let cmu = dummy_note.cm(&JUBJUB);

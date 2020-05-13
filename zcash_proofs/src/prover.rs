@@ -132,11 +132,12 @@ impl TxProver for LocalTxProver {
         (
             [u8; GROTH_PROOF_SIZE],
             edwards::Point<Bls12, Unknown>,
+            Fs,
             PublicKey<Bls12>,
         ),
         (),
     > {
-        let (proof, cv, rk) = ctx.spend_proof(
+        let (proof, cv, rcv, rk) = ctx.spend_proof(
             proof_generation_key,
             diversifier,
             rcm,
@@ -154,7 +155,7 @@ impl TxProver for LocalTxProver {
             .write(&mut zkproof[..])
             .expect("should be able to serialize a proof");
 
-        Ok((zkproof, cv, rk))
+        Ok((zkproof, cv, rcv, rk))
     }
 
     fn output_proof(
@@ -164,8 +165,8 @@ impl TxProver for LocalTxProver {
         payment_address: PaymentAddress<Bls12>,
         rcm: Fs,
         value: u64,
-    ) -> ([u8; GROTH_PROOF_SIZE], edwards::Point<Bls12, Unknown>) {
-        let (proof, cv) = ctx.output_proof(
+    ) -> ([u8; GROTH_PROOF_SIZE], edwards::Point<Bls12, Unknown>, Fs) {
+        let (proof, cv, rcv) = ctx.output_proof(
             esk,
             payment_address,
             rcm,
@@ -179,7 +180,7 @@ impl TxProver for LocalTxProver {
             .write(&mut zkproof[..])
             .expect("should be able to serialize a proof");
 
-        (zkproof, cv)
+        (zkproof, cv, rcv)
     }
 
     fn binding_sig(

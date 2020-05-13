@@ -879,7 +879,7 @@ pub extern "C" fn librustzcash_sapling_output_proof(
     };
 
     // Create proof
-    let (proof, value_commitment) = unsafe { &mut *ctx }.output_proof(
+    let (proof, value_commitment, _) = unsafe { &mut *ctx }.output_proof(
         esk,
         payment_address,
         rcm,
@@ -1037,7 +1037,7 @@ pub extern "C" fn librustzcash_sapling_spend_proof(
     };
 
     // Create proof
-    let (proof, value_commitment, rk) = unsafe { &mut *ctx }
+    let (proof, value_commitment, _, rk) = unsafe { &mut *ctx }
         .spend_proof(
             proof_generation_key,
             diversifier,

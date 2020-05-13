@@ -54,6 +54,7 @@ impl SaplingProvingContext {
         (
             Proof<Bls12>,
             edwards::Point<Bls12, Unknown>,
+            Fs,
             PublicKey<Bls12>,
         ),
         (),
@@ -175,7 +176,7 @@ impl SaplingProvingContext {
             self.cv_sum = tmp;
         }
 
-        Ok((proof, value_commitment, rk))
+        Ok((proof, value_commitment, rcv, rk))
     }
 
     /// Create the value commitment and proof for a Sapling OutputDescription,
@@ -189,7 +190,7 @@ impl SaplingProvingContext {
         value: u64,
         proving_key: &Parameters<Bls12>,
         params: &JubjubBls12,
-    ) -> (Proof<Bls12>, edwards::Point<Bls12, Unknown>) {
+    ) -> (Proof<Bls12>, edwards::Point<Bls12, Unknown>, Fs) {
         // Initialize secure RNG
         let mut rng = OsRng;
 
@@ -240,7 +241,7 @@ impl SaplingProvingContext {
             self.cv_sum = tmp;
         }
 
-        (proof, value_commitment)
+        (proof, value_commitment, rcv)
     }
 
     /// Create the bindingSig for a Sapling transaction. All calls to spend_proof()
