@@ -19,7 +19,7 @@ pub const HRP_SAPLING_EXTENDED_SPENDING_KEY: &str = "secret-extended-key-main";
 ///
 /// [`ExtendedFullViewingKey`]: zcash_primitives::zip32::ExtendedFullViewingKey
 /// [ZIP 32]: https://github.com/zcash/zips/blob/master/zip-0032.rst
-pub const HRP_SAPLING_EXTENDED_FULL_VIEWING_KEY: &str = "zxviews";
+pub const HRP_SAPLING_EXTENDED_FULL_VIEWING_KEY: &str = "taoviews";
 
 /// The HRP for a Bech32-encoded mainnet [`PaymentAddress`].
 ///
